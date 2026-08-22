@@ -12,8 +12,9 @@ import {
   where,
 } from 'firebase/firestore'
 
-import { db } from '../lib/firebase'
+import { auth, db } from '../lib/firebase'
 import type { CreateTaskInput, Task } from '../types/task'
+import { getWorkspaceMember } from './workspaceService'
 
 const TASKS_COLLECTION = 'tasks'
 
@@ -46,11 +47,25 @@ function mapTask(id: string, data: Record<string, unknown>): Task {
 }
 
 export async function getTasks(workspaceId: string): Promise<Task[]> {
-  const snapshot = await getDocs(query(
-    collection(db, TASKS_COLLECTION),
-    where('workspaceId', '==', workspaceId),
-    orderBy('createdAt', 'desc'),
-  ))
+  const currentUser = auth.currentUser
+  const currentMember = currentUser
+    ? await getWorkspaceMember(workspaceId, currentUser.uid)
+    : null
+
+  const tasksRef = collection(db, TASKS_COLLECTION)
+  const constraints = currentMember?.role === 'intern'
+    ? [
+        where('workspaceId', '==', workspaceId),
+        where('assigneeId', '==', currentUser?.uid ?? ''),
+        orderBy('createdAt', 'desc'),
+      ]
+    : [
+        where('workspaceId', '==', workspaceId),
+        orderBy('createdAt', 'desc'),
+      ]
+
+  const snapshot = await getDocs(query(tasksRef, ...constraints))
+
   return snapshot.docs
     .map((item) => mapTask(item.id, item.data() as Record<string, unknown>))
     .filter((task) => !task.deletedAt)
