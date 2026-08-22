@@ -8,6 +8,8 @@ export type Project = BaseEntity & {
   name: string
   clientId: string
   clientName: string
+  ownerId: string
+  ownerName: string
   type: ProjectType
   status: ProjectStatus
   priority: ProjectPriority
@@ -23,6 +25,8 @@ export type CreateProjectInput = {
   name: string
   clientId: string
   clientName: string
+  ownerId: string
+  ownerName: string
   type: ProjectType
   status: ProjectStatus
   priority: ProjectPriority
