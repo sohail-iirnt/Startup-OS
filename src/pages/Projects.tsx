@@ -9,39 +9,221 @@ import Input from '../components/ui/Input'
 import ProjectModal from '../components/projects/ProjectModal'
 import { useWorkspace } from '../context/useWorkspace'
 import { getClients } from '../services/clientService'
+import { getWorkspaceMembers } from '../services/memberService'
 import { createProject, deleteProject, getProjects, updateProject } from '../services/projectService'
 import type { Client } from '../types/client'
 import type { CreateProjectInput, Project, ProjectPriority, ProjectStatus } from '../types/project'
+import type { WorkspaceMember } from '../types/workspace'
 
-const statusLabels: Record<ProjectStatus,string> = { planning:'Planning','in-development':'In Development','on-hold':'On Hold',testing:'Testing',completed:'Completed',cancelled:'Cancelled' }
-const statusClasses: Record<ProjectStatus,string> = { planning:'bg-[rgba(139,124,255,0.12)] text-[var(--os-accent)]','in-development':'bg-[rgba(90,169,255,0.12)] text-[var(--os-info)]','on-hold':'bg-[rgba(255,255,255,0.08)] text-[var(--os-text-secondary)]',testing:'bg-[rgba(245,185,66,0.12)] text-[var(--os-warning)]',completed:'bg-[rgba(66,211,146,0.12)] text-[var(--os-success)]',cancelled:'bg-[rgba(255,100,124,0.12)] text-[var(--os-danger)]' }
-const priorityLabels: Record<ProjectPriority,string> = { low:'Low', medium:'Medium', high:'High', urgent:'Urgent' }
-const priorityClasses: Record<ProjectPriority,string> = { low:'text-[var(--os-text-muted)]', medium:'text-[var(--os-text-secondary)]', high:'text-[var(--os-warning)]', urgent:'text-[var(--os-danger)]' }
+const statusLabels: Record<ProjectStatus, string> = { planning: 'Planning', 'in-development': 'In Development', 'on-hold': 'On Hold', testing: 'Testing', completed: 'Completed', cancelled: 'Cancelled' }
+const statusClasses: Record<ProjectStatus, string> = { planning: 'bg-[rgba(139,124,255,0.12)] text-[var(--os-accent)]', 'in-development': 'bg-[rgba(90,169,255,0.12)] text-[var(--os-info)]', 'on-hold': 'bg-[rgba(255,255,255,0.08)] text-[var(--os-text-secondary)]', testing: 'bg-[rgba(245,185,66,0.12)] text-[var(--os-warning)]', completed: 'bg-[rgba(66,211,146,0.12)] text-[var(--os-success)]', cancelled: 'bg-[rgba(255,100,124,0.12)] text-[var(--os-danger)]' }
+const priorityLabels: Record<ProjectPriority, string> = { low: 'Low', medium: 'Medium', high: 'High', urgent: 'Urgent' }
+const priorityClasses: Record<ProjectPriority, string> = { low: 'text-[var(--os-text-muted)]', medium: 'text-[var(--os-text-secondary)]', high: 'text-[var(--os-warning)]', urgent: 'text-[var(--os-danger)]' }
 type Filter = 'all' | ProjectStatus
-function money(value:number) { return new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR',maximumFractionDigits:0}).format(value) }
-function dateText(date:Date|null) { return date ? new Intl.DateTimeFormat('en-IN',{day:'2-digit',month:'short',year:'numeric'}).format(date) : 'No deadline' }
+function money(value: number) { return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value) }
+function dateText(date: Date | null) { return date ? new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).format(date) : 'No deadline' }
 
 function Projects() {
-  const navigate = useNavigate(); const { workspace, loading: workspaceLoading } = useWorkspace()
-  const [projects,setProjects]=useState<Project[]>([]); const [clients,setClients]=useState<Client[]>([]); const [loading,setLoading]=useState(true); const [error,setError]=useState(''); const [search,setSearch]=useState(''); const [filter,setFilter]=useState<Filter>('all'); const [modalOpen,setModalOpen]=useState(false); const [editing,setEditing]=useState<Project|null>(null); const [modalInstance,setModalInstance]=useState(0); const [saving,setSaving]=useState(false); const [deleting,setDeleting]=useState(false); const [toDelete,setToDelete]=useState<Project|null>(null)
+  const navigate = useNavigate()
+  const { workspace, loading: workspaceLoading } = useWorkspace()
+  const [projects, setProjects] = useState<Project[]>([])
+  const [clients, setClients] = useState<Client[]>([])
+  const [members, setMembers] = useState<WorkspaceMember[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [filter, setFilter] = useState<Filter>('all')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editing, setEditing] = useState<Project | null>(null)
+  const [modalInstance, setModalInstance] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [toDelete, setToDelete] = useState<Project | null>(null)
 
-  useEffect(() => { let cancelled=false; async function load(){ if(workspaceLoading)return; if(!workspace?.id){setProjects([]);setClients([]);setLoading(false);return} setLoading(true);setError(''); try { const [projectResult,clientResult]=await Promise.all([getProjects(workspace.id),getClients(workspace.id)]); if(!cancelled){setProjects(projectResult);setClients(clientResult)}} catch(e){if(!cancelled)setError(e instanceof Error?e.message:'Failed to load projects.')} finally{if(!cancelled)setLoading(false)}} void load(); return()=>{cancelled=true} },[workspace?.id,workspaceLoading])
+  useEffect(() => {
+    let cancelled = false
 
-  const filtered=useMemo(()=>{const q=search.trim().toLowerCase();return projects.filter(p=>(filter==='all'||p.status===filter)&&(!q||[p.name,p.clientName,p.type,p.priority].some(v=>v.toLowerCase().includes(q))))},[projects,search,filter])
-  const stats=useMemo(()=>({total:projects.length,active:projects.filter(p=>p.status==='in-development').length,completed:projects.filter(p=>p.status==='completed').length,value:projects.reduce((sum,p)=>sum+p.projectValue,0)}),[projects])
-  function openCreate(){setError('');setEditing(null);setModalInstance(v=>v+1);setModalOpen(true)}
-  function openEdit(p:Project){setError('');setEditing(p);setModalInstance(v=>v+1);setModalOpen(true)}
-  async function save(input:CreateProjectInput){if(!workspace?.id)throw new Error('Workspace is not available.');setSaving(true);setError('');try{if(editing){const updated=await updateProject(editing.id,workspace.id,input);setProjects(current=>current.map(p=>p.id===updated.id?updated:p))}else{const created=await createProject(workspace.id,input);setProjects(current=>[created,...current])}setModalOpen(false)}catch(e){setError(e instanceof Error?e.message:'Failed to save project.');throw e}finally{setSaving(false)}}
-  async function confirmDelete(){if(!toDelete||!workspace?.id)return;setDeleting(true);setError('');try{await deleteProject(toDelete.id,workspace.id);setProjects(current=>current.filter(p=>p.id!==toDelete.id));setToDelete(null)}catch(e){setError(e instanceof Error?e.message:'Failed to delete project.')}finally{setDeleting(false)}}
+    async function load() {
+      if (workspaceLoading) return
+      if (!workspace?.id) {
+        setProjects([])
+        setClients([])
+        setMembers([])
+        setLoading(false)
+        return
+      }
 
-  return <div className="mx-auto w-full max-w-[1400px] p-4 sm:p-6 lg:p-8">
-    <section className="mb-6 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--os-accent)]">Execution</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-[var(--os-text)] sm:text-4xl">Projects</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--os-text-secondary)]">Your project command center for delivery, deadlines, ownership, value, and progress.</p></div><Button type="button" onClick={openCreate} disabled={workspaceLoading||!workspace?.id}><Plus size={16}/> New Project</Button></section>
-    {error&&<div role="alert" className="mb-5 rounded-xl border border-[rgba(255,100,124,0.25)] bg-[rgba(255,100,124,0.08)] px-4 py-3 text-sm text-[var(--os-danger)]">{error}</div>}
-    <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Stat label="Total Projects" value={String(stats.total)} icon={<FolderKanban size={18}/>}/><Stat label="In Development" value={String(stats.active)} icon={<CalendarClock size={18}/>}/><Stat label="Completed" value={String(stats.completed)} icon={<CircleDollarSign size={18}/>}/><Stat label="Project Value" value={money(stats.value)} icon={<CircleDollarSign size={18}/>}/></div>
-    <Card className="mb-5 p-4"><div className="grid gap-3 lg:grid-cols-[1fr_auto]"><div className="relative"><Search size={17} className="pointer-events-none absolute left-3 top-3.5 text-[var(--os-text-muted)]"/><Input aria-label="Search projects" value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search project, client, type, or priority..." className="pl-10"/></div><div className="flex flex-wrap gap-2">{(['all','planning','in-development','on-hold','testing','completed','cancelled'] as Filter[]).map(s=><button key={s} type="button" onClick={()=>setFilter(s)} className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${filter===s?'bg-[var(--os-accent-soft)] text-[var(--os-accent)]':'text-[var(--os-text-secondary)] hover:bg-[var(--os-surface-hover)]'}`}>{s==='all'?'All':statusLabels[s]}</button>)}</div></div></Card>
-    {loading||workspaceLoading?<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{[1,2,3].map(i=><Card key={i} className="h-56 animate-pulse bg-[var(--os-surface-hover)]"/>)}</div>:filtered.length===0?<EmptyState icon={<FolderKanban size={22}/>} title={projects.length?'No projects match your filters':'No projects yet'} description={projects.length?'Try a different search or status filter.':'Create your first project and connect it to a client.'} action={!projects.length?<Button type="button" onClick={openCreate}><Plus size={16}/> New Project</Button>:undefined}/>:<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{filtered.map(project=><Card key={project.id} className="group p-5 transition-transform hover:-translate-y-0.5"><button type="button" onClick={()=>navigate(`/projects/${project.id}`)} className="block w-full text-left"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--os-accent-soft)] text-[var(--os-accent)]"><FolderKanban size={20}/></span><div className="min-w-0"><h2 className="truncate text-base font-semibold text-[var(--os-text)]">{project.name}</h2><p className="truncate text-xs text-[var(--os-text-secondary)]">{project.clientName||'No client'}</p></div></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${statusClasses[project.status]}`}>{statusLabels[project.status]}</span></div><div className="mt-5 grid grid-cols-2 gap-3"><div><p className="text-[10px] uppercase tracking-[0.12em] text-[var(--os-text-muted)]">Value</p><p className="mt-1 text-sm font-semibold text-[var(--os-text)]">{money(project.projectValue)}</p></div><div><p className="text-[10px] uppercase tracking-[0.12em] text-[var(--os-text-muted)]">Priority</p><p className={`mt-1 text-sm font-semibold ${priorityClasses[project.priority]}`}>{priorityLabels[project.priority]}</p></div></div><div className="mt-4 flex items-center gap-2 text-xs text-[var(--os-text-secondary)]"><CalendarClock size={14}/>{dateText(project.deadline)}<span className="mx-1">•</span><UserRound size={14}/>{project.type.replace('-', ' ')}</div></button><div className="mt-5 flex justify-end gap-2 border-t border-[var(--os-border)] pt-4"><Button type="button" variant="secondary" onClick={()=>openEdit(project)}><Edit3 size={14}/> Edit</Button><Button type="button" variant="secondary" onClick={()=>setToDelete(project)}><Trash2 size={14}/> Delete</Button></div></Card>)}</div>}
-    <ProjectModal key={`project-modal-${modalInstance}`} open={modalOpen} project={editing} clients={clients} saving={saving} onClose={()=>!saving&&setModalOpen(false)} onSubmit={save}/><ConfirmDialog open={Boolean(toDelete)} title="Delete project?" description={toDelete?<>You are about to permanently delete <strong>{toDelete.name}</strong>. This cannot be undone.</>:''} confirmLabel="Delete Project" loading={deleting} onCancel={()=>!deleting&&setToDelete(null)} onConfirm={confirmDelete}/>
-  </div>
+      setLoading(true)
+      setError('')
+
+      try {
+        const [projectResult, clientResult, memberResult] = await Promise.all([
+          getProjects(workspace.id),
+          getClients(workspace.id),
+          getWorkspaceMembers(workspace.id),
+        ])
+
+        if (!cancelled) {
+          setProjects(projectResult)
+          setClients(clientResult)
+          setMembers(memberResult)
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load projects.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    void load()
+    return () => { cancelled = true }
+  }, [workspace?.id, workspaceLoading])
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return projects.filter((p) =>
+      (filter === 'all' || p.status === filter) &&
+      (!q || [p.name, p.clientName, p.type, p.priority, p.ownerName].some((v) => v.toLowerCase().includes(q))),
+    )
+  }, [projects, search, filter])
+
+  const stats = useMemo(() => ({
+    total: projects.length,
+    active: projects.filter((p) => p.status === 'in-development').length,
+    completed: projects.filter((p) => p.status === 'completed').length,
+    value: projects.reduce((sum, p) => sum + p.projectValue, 0),
+  }), [projects])
+
+  function openCreate() {
+    setError('')
+    setEditing(null)
+    setModalInstance((v) => v + 1)
+    setModalOpen(true)
+  }
+
+  function openEdit(p: Project) {
+    setError('')
+    setEditing(p)
+    setModalInstance((v) => v + 1)
+    setModalOpen(true)
+  }
+
+  async function save(input: CreateProjectInput) {
+    if (!workspace?.id) throw new Error('Workspace is not available.')
+    setSaving(true)
+    setError('')
+
+    try {
+      if (editing) {
+        const updated = await updateProject(editing.id, workspace.id, input)
+        setProjects((current) => current.map((p) => p.id === updated.id ? updated : p))
+      } else {
+        const created = await createProject(workspace.id, input)
+        setProjects((current) => [created, ...current])
+      }
+      setModalOpen(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to save project.')
+      throw e
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function confirmDelete() {
+    if (!toDelete || !workspace?.id) return
+    setDeleting(true)
+    setError('')
+    try {
+      await deleteProject(toDelete.id, workspace.id)
+      setProjects((current) => current.filter((p) => p.id !== toDelete.id))
+      setToDelete(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to delete project.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-[1400px] p-4 sm:p-6 lg:p-8">
+      <section className="mb-6 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--os-accent)]">Execution</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[var(--os-text)] sm:text-4xl">Projects</h1>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--os-text-secondary)]">Your project command center for delivery, deadlines, ownership, value, and progress.</p>
+        </div>
+        <Button type="button" onClick={openCreate} disabled={workspaceLoading || !workspace?.id}><Plus size={16} /> New Project</Button>
+      </section>
+
+      {error && <div role="alert" className="mb-5 rounded-xl border border-[rgba(255,100,124,0.25)] bg-[rgba(255,100,124,0.08)] px-4 py-3 text-sm text-[var(--os-danger)]">{error}</div>}
+
+      <div className="mb-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat label="Total Projects" value={String(stats.total)} icon={<FolderKanban size={18} />} />
+        <Stat label="In Development" value={String(stats.active)} icon={<CalendarClock size={18} />} />
+        <Stat label="Completed" value={String(stats.completed)} icon={<CircleDollarSign size={18} />} />
+        <Stat label="Project Value" value={money(stats.value)} icon={<CircleDollarSign size={18} />} />
+      </div>
+
+      <Card className="mb-5 p-4">
+        <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
+          <div className="relative">
+            <Search size={17} className="pointer-events-none absolute left-3 top-3.5 text-[var(--os-text-muted)]" />
+            <Input aria-label="Search projects" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search project, client, owner, type, or priority..." className="pl-10" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(['all', 'planning', 'in-development', 'on-hold', 'testing', 'completed', 'cancelled'] as Filter[]).map((s) => (
+              <button key={s} type="button" onClick={() => setFilter(s)} className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${filter === s ? 'bg-[var(--os-accent-soft)] text-[var(--os-accent)]' : 'text-[var(--os-text-secondary)] hover:bg-[var(--os-surface-hover)]'}`}>
+                {s === 'all' ? 'All' : statusLabels[s]}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      {loading || workspaceLoading ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((i) => <Card key={i} className="h-56 animate-pulse bg-[var(--os-surface-hover)]" />)}</div>
+      ) : filtered.length === 0 ? (
+        <EmptyState icon={<FolderKanban size={22} />} title={projects.length ? 'No projects match your filters' : 'No projects yet'} description={projects.length ? 'Try a different search or status filter.' : 'Create your first project and connect it to a client.'} action={!projects.length ? <Button type="button" onClick={openCreate}><Plus size={16} /> New Project</Button> : undefined} />
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filtered.map((project) => (
+            <Card key={project.id} className="group p-5 transition-transform hover:-translate-y-0.5">
+              <button type="button" onClick={() => navigate(`/projects/${project.id}`)} className="block w-full text-left">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--os-accent-soft)] text-[var(--os-accent)]"><FolderKanban size={20} /></span>
+                    <div className="min-w-0"><h2 className="truncate text-base font-semibold text-[var(--os-text)]">{project.name}</h2><p className="truncate text-xs text-[var(--os-text-secondary)]">{project.clientName || 'No client'}</p></div>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${statusClasses[project.status]}`}>{statusLabels[project.status]}</span>
+                </div>
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  <div><p className="text-[10px] uppercase tracking-[0.12em] text-[var(--os-text-muted)]">Value</p><p className="mt-1 text-sm font-semibold text-[var(--os-text)]">{money(project.projectValue)}</p></div>
+                  <div><p className="text-[10px] uppercase tracking-[0.12em] text-[var(--os-text-muted)]">Priority</p><p className={`mt-1 text-sm font-semibold ${priorityClasses[project.priority]}`}>{priorityLabels[project.priority]}</p></div>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-[var(--os-text-secondary)]">
+                  <CalendarClock size={14} /> {dateText(project.deadline)}
+                  <span className="mx-1">•</span>
+                  <UserRound size={14} /> {project.ownerName || 'Unassigned'}
+                </div>
+              </button>
+              <div className="mt-5 flex justify-end gap-2 border-t border-[var(--os-border)] pt-4">
+                <Button type="button" variant="secondary" onClick={() => openEdit(project)}><Edit3 size={14} /> Edit</Button>
+                <Button type="button" variant="secondary" onClick={() => setToDelete(project)}><Trash2 size={14} /> Delete</Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <ProjectModal key={`project-modal-${modalInstance}`} open={modalOpen} project={editing} clients={clients} members={members} saving={saving} onClose={() => !saving && setModalOpen(false)} onSubmit={save} />
+      <ConfirmDialog open={Boolean(toDelete)} title="Delete project?" description={toDelete ? <>You are about to permanently delete <strong>{toDelete.name}</strong>. This cannot be undone.</> : ''} confirmLabel="Delete Project" loading={deleting} onCancel={() => !deleting && setToDelete(null)} onConfirm={confirmDelete} />
+    </div>
+  )
 }
-function Stat({label,value,icon}:{label:string;value:string;icon:React.ReactNode}){return <Card className="p-4"><div className="flex items-center justify-between"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--os-accent-soft)] text-[var(--os-accent)]">{icon}</span><span className="text-xl font-semibold text-[var(--os-text)]">{value}</span></div><p className="mt-3 text-xs font-medium text-[var(--os-text-muted)]">{label}</p></Card>}
+
+function Stat({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
+  return <Card className="p-4"><div className="flex items-center justify-between"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--os-accent-soft)] text-[var(--os-accent)]">{icon}</span><span className="text-xl font-semibold text-[var(--os-text)]">{value}</span></div><p className="mt-3 text-xs font-medium text-[var(--os-text-muted)]">{label}</p></Card>
+}
+
 export default Projects
