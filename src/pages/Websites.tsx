@@ -83,7 +83,7 @@ function Websites() {
   const [editingWebsite, setEditingWebsite] =
     useState<Website | null>(null)
   const [modalInstance, setModalInstance] =
-	useState(0))
+    useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -132,25 +132,25 @@ function Websites() {
   }, [workspace?.id])
 
   function openCreateModal() {
-  if (!workspace?.id) {
-    setError(
-      'Please wait for the workspace to finish loading.',
-    )
-    return
+    if (!workspace?.id) {
+      setError(
+        'Please wait for the workspace to finish loading.',
+      )
+      return
+    }
+
+    setError('')
+    setEditingWebsite(null)
+    setModalInstance((current) => current + 1)
+    setModalOpen(true)
   }
 
-  setError('')
-  setEditingWebsite(null)
-  setModalInstance((current) => current + 1)
-  setModalOpen(true)
-}
-
   function openEditModal(website: Website) {
-  setError('')
-  setEditingWebsite(website)
-  setModalInstance((current) => current + 1)
-  setModalOpen(true)
-}
+    setError('')
+    setEditingWebsite(website)
+    setModalInstance((current) => current + 1)
+    setModalOpen(true)
+  }
 
   function closeModal() {
     if (saving) {
@@ -569,11 +569,8 @@ function Websites() {
                             {website.name}
                           </p>
 
-                          <p className="mt-1 text-xs capitalize text-[var(--os-text-muted)]">
-                            {website.type.replace(
-                              '-',
-                              ' ',
-                            )}
+                          <p className="mt-1 text-xs text-[var(--os-text-muted)]">
+                            {website.type}
                           </p>
                         </td>
 
@@ -633,19 +630,25 @@ function Websites() {
 
                         <td className="py-4">
                           <div className="flex items-center gap-1">
-                            <IconButton
-                              label={`Edit ${website.name}`}
+                            <button
+                              type="button"
                               onClick={() =>
                                 openEditModal(
                                   website,
                                 )
                               }
+                              disabled={
+                                deletingId ===
+                                website.id
+                              }
+                              aria-label={`Edit ${website.name}`}
+                              className="os-focus-ring flex h-9 w-9 items-center justify-center rounded-lg text-[var(--os-text-muted)] transition-colors hover:bg-[var(--os-surface-hover)] hover:text-[var(--os-accent)] disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              <Edit3 size={14} />
-                            </IconButton>
+                              <Edit3 size={15} />
+                            </button>
 
-                            <IconButton
-                              label={`Delete ${website.name}`}
+                            <button
+                              type="button"
                               onClick={() =>
                                 void handleDelete(
                                   website,
@@ -655,10 +658,16 @@ function Websites() {
                                 deletingId ===
                                 website.id
                               }
-                              danger
+                              aria-label={`Delete ${website.name}`}
+                              className="os-focus-ring flex h-9 w-9 items-center justify-center rounded-lg text-[var(--os-text-muted)] transition-colors hover:bg-[rgba(255,100,124,0.08)] hover:text-[var(--os-danger)] disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              <Trash2 size={14} />
-                            </IconButton>
+                              {deletingId ===
+                              website.id ? (
+                                <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                              ) : (
+                                <Trash2 size={15} />
+                              )}
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -671,19 +680,16 @@ function Websites() {
         </div>
       </Card>
 
-      {/*
-       * The key is intentional. WebsiteModal owns its initial
-       * form state, so changing between create/edit remounts it
-       * instead of synchronously resetting state inside an effect.
-       */}
-      <WebsiteModal
-		key={`website-modal-${modalInstance}`}
-        open={modalOpen}
-        website={editingWebsite}
-        saving={saving}
-        onClose={closeModal}
-        onSubmit={handleSave}
-      />
+      {modalOpen && (
+        <WebsiteModal
+          key={`website-modal-${modalInstance}`}
+          website={editingWebsite}
+          open={modalOpen}
+          saving={saving}
+          onClose={closeModal}
+          onSave={handleSave}
+        />
+      )}
     </div>
   )
 }
@@ -777,9 +783,7 @@ function WebsiteCard({
     amount: number,
   ) => string
   onEdit: (website: Website) => void
-  onDelete: (
-    website: Website,
-  ) => void | Promise<void>
+  onDelete: (website: Website) => void
   deleting: boolean
 }) {
   return (
@@ -850,108 +854,57 @@ function WebsiteCard({
             </a>
           )}
 
-          <IconButton
-            label={`Edit ${website.name}`}
+          <button
+            type="button"
             onClick={() => onEdit(website)}
-          >
-            <Edit3 size={14} />
-          </IconButton>
-
-          <IconButton
-            label={`Delete ${website.name}`}
-            onClick={() =>
-              void onDelete(website)
-            }
             disabled={deleting}
-            danger
+            aria-label={`Edit ${website.name}`}
+            className="os-focus-ring flex h-9 w-9 items-center justify-center rounded-lg text-[var(--os-text-muted)] transition-colors hover:bg-[var(--os-surface-hover)] hover:text-[var(--os-accent)] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <Trash2 size={14} />
-          </IconButton>
+            <Edit3 size={15} />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onDelete(website)}
+            disabled={deleting}
+            aria-label={`Delete ${website.name}`}
+            className="os-focus-ring flex h-9 w-9 items-center justify-center rounded-lg text-[var(--os-text-muted)] transition-colors hover:bg-[rgba(255,100,124,0.08)] hover:text-[var(--os-danger)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {deleting ? (
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            ) : (
+              <Trash2 size={15} />
+            )}
+          </button>
         </div>
       </div>
     </div>
   )
 }
 
-function InfoItem({
-  label,
-  value,
-}: {
-  label: string
-  value: string
-}) {
-  return (
-    <div className="min-w-0 rounded-xl border border-[var(--os-border)] bg-[var(--os-surface)] p-3">
-      <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--os-text-muted)]">
-        {label}
-      </p>
-
-      <p className="mt-1 truncate text-xs font-medium text-[var(--os-text-secondary)]">
-        {value}
-      </p>
-    </div>
-  )
-}
-
-function IconButton({
-  label,
-  onClick,
-  children,
-  disabled = false,
-  danger = false,
-}: {
-  label: string
-  onClick: () => void
-  children: ReactNode
-  disabled?: boolean
-  danger?: boolean
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      disabled={disabled}
-      className={[
-        'os-focus-ring flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--os-surface-hover)] text-[var(--os-text-muted)] transition-colors disabled:cursor-not-allowed disabled:opacity-50',
-        danger
-          ? 'hover:text-[var(--os-danger)]'
-          : 'hover:text-[var(--os-accent)]',
-      ].join(' ')}
-    >
-      {children}
-    </button>
-  )
-}
-
 function LoadingState() {
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {Array.from({ length: 6 }).map(
-        (_, index) => (
-          <div
-            key={index}
-            className="animate-pulse rounded-2xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] p-5"
-          >
-            <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-xl bg-[var(--os-surface-hover)]" />
-
-              <div className="flex-1 space-y-2">
-                <div className="h-3 w-2/3 rounded bg-[var(--os-surface-hover)]" />
-                <div className="h-2.5 w-1/2 rounded bg-[var(--os-surface-hover)]" />
-              </div>
+      {Array.from({ length: 6 }, (_, index) => (
+        <div
+          key={index}
+          className="animate-pulse rounded-2xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] p-5"
+        >
+          <div className="flex items-center gap-3">
+            <div className="h-11 w-11 rounded-xl bg-[var(--os-surface-hover)]" />
+            <div className="flex-1">
+              <div className="h-3 w-2/3 rounded bg-[var(--os-surface-hover)]" />
+              <div className="mt-2 h-2.5 w-1/2 rounded bg-[var(--os-surface-hover)]" />
             </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <div className="h-14 rounded-xl bg-[var(--os-surface-hover)]" />
-              <div className="h-14 rounded-xl bg-[var(--os-surface-hover)]" />
-            </div>
-
-            <div className="mt-4 h-9 rounded-lg bg-[var(--os-surface-hover)]" />
           </div>
-        ),
-      )}
+
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <div className="h-16 rounded-xl bg-[var(--os-surface-hover)]" />
+            <div className="h-16 rounded-xl bg-[var(--os-surface-hover)]" />
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
