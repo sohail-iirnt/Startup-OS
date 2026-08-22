@@ -121,7 +121,9 @@ function WorkspaceSettings() {
     try {
       await createWorkspace(user.uid, normalizedName, description)
       await refreshWorkspace()
-      closeCreateWorkspace()
+      setCreateOpen(false)
+      setWorkspaceName('')
+      setDescription('')
     } catch (createError) {
       setError(
         createError instanceof Error
