@@ -2,6 +2,7 @@ import type {
   ID,
   TimestampFields,
   UserRole,
+  MembershipStatus,
 } from './common'
 
 export type UserProfile = {
@@ -17,7 +18,7 @@ export type WorkspaceMembership = {
   workspaceId: ID
   userId: ID
   role: UserRole
-  status: 'active' | 'invited' | 'suspended'
+  status: MembershipStatus
   joinedAt: Date
   updatedAt: Date
 }
