@@ -11,7 +11,6 @@ import {
 
 import { auth } from '../lib/firebase'
 import { createUserProfile } from '../services/userService'
-import { initializeDefaultWorkspace } from '../services/workspaceService'
 import {
   AuthContext,
   type AuthContextValue,
@@ -24,27 +23,21 @@ type AuthProviderProps = {
 export function AuthProvider({
   children,
 }: AuthProviderProps) {
-  const [user, setUser] =
-    useState<User | null>(null)
-
-  const [loading, setLoading] =
-    useState(true)
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const unsubscribe =
-      onAuthStateChanged(
-        auth,
-        (firebaseUser) => {
-          setUser(firebaseUser)
-          setLoading(false)
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (firebaseUser) => {
+        setUser(firebaseUser)
+        setLoading(false)
 
-          if (firebaseUser) {
-            void initializeUserData(
-              firebaseUser,
-            )
-          }
-        },
-      )
+        if (firebaseUser) {
+          void initializeUserData(firebaseUser)
+        }
+      },
+    )
 
     return unsubscribe
   }, [])
@@ -62,22 +55,14 @@ export function AuthProvider({
   )
 }
 
-async function initializeUserData(
-  firebaseUser: User,
-): Promise<void> {
+async function initializeUserData(firebaseUser: User): Promise<void> {
   try {
-    await createUserProfile(
-      firebaseUser,
-    )
-
-    await initializeDefaultWorkspace(
-      firebaseUser.uid,
-      firebaseUser,
-    )
+    // Authentication creates the identity profile only.
+    // Workspace membership is intentionally NOT auto-created here.
+    // Existing members keep their default workspace; new registrations
+    // must explicitly request access to a workspace using its Workspace ID.
+    await createUserProfile(firebaseUser)
   } catch (error) {
-    console.error(
-      'Failed to initialize user data:',
-      error,
-    )
+    console.error('Failed to initialize user profile:', error)
   }
 }
