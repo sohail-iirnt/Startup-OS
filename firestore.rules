@@ -1,0 +1,92 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{userId} {
+      allow read, create, update: if request.auth != null
+        && request.auth.uid == userId;
+      allow delete: if false;
+    }
+
+    match /workspaces/{workspaceId} {
+      allow create: if request.auth != null;
+      allow read, update: if request.auth != null;
+      allow delete: if false;
+
+      match /members/{memberId} {
+        allow create, read, update: if request.auth != null;
+        allow delete: if false;
+      }
+    }
+
+    match /websites/{websiteId} {
+      allow create: if request.auth != null
+        && request.resource.data.workspaceId is string
+        && request.resource.data.workspaceId != '';
+
+      allow read: if request.auth != null
+        && resource.data.workspaceId is string
+        && resource.data.workspaceId != '';
+
+      allow update: if request.auth != null
+        && resource.data.workspaceId == request.resource.data.workspaceId
+        && resource.data.workspaceId is string
+        && resource.data.workspaceId != '';
+
+      allow delete: if request.auth != null
+        && resource.data.workspaceId is string
+        && resource.data.workspaceId != '';
+    }
+
+    match /clients/{clientId} {
+      allow create: if request.auth != null
+        && request.resource.data.workspaceId is string
+        && request.resource.data.workspaceId != '';
+      allow read: if request.auth != null
+        && resource.data.workspaceId is string
+        && resource.data.workspaceId != '';
+      allow update: if request.auth != null
+        && resource.data.workspaceId == request.resource.data.workspaceId;
+      allow delete: if request.auth != null
+        && resource.data.workspaceId is string
+        && resource.data.workspaceId != '';
+    }
+
+    match /projects/{projectId} {
+      allow create: if request.auth != null
+        && request.resource.data.workspaceId is string
+        && request.resource.data.workspaceId != '';
+      allow read: if request.auth != null
+        && resource.data.workspaceId is string
+        && resource.data.workspaceId != '';
+      allow update: if request.auth != null
+        && resource.data.workspaceId == request.resource.data.workspaceId;
+      allow delete: if request.auth != null
+        && resource.data.workspaceId is string
+        && resource.data.workspaceId != '';
+    }
+
+    match /tasks/{taskId} {
+      allow create: if request.auth != null
+        && request.resource.data.workspaceId is string
+        && request.resource.data.workspaceId != ''
+        && request.resource.data.createdBy == request.auth.uid;
+
+      allow read: if request.auth != null
+        && resource.data.workspaceId is string
+        && resource.data.workspaceId != '';
+
+      allow update: if request.auth != null
+        && resource.data.workspaceId == request.resource.data.workspaceId;
+
+      allow delete: if request.auth != null
+        && resource.data.workspaceId is string
+        && resource.data.workspaceId != '';
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
