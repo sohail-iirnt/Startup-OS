@@ -1,6 +1,4 @@
-import type {
-  BaseEntity,
-} from './common'
+import type { BaseEntity } from './common'
 
 export type ClientType =
   | 'individual'
@@ -24,4 +22,17 @@ export type Client = BaseEntity & {
   source?: string
   notes?: string
   deletedAt?: Date | null
+}
+
+export type CreateClientInput = {
+  type: ClientType
+  name: string
+  companyName: string
+  email: string
+  phone: string
+  website: string
+  address: string
+  status: ClientStatus
+  source: string
+  notes: string
 }
