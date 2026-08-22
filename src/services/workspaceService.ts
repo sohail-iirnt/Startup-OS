@@ -112,8 +112,8 @@ export async function initializeDefaultWorkspace(userId: string, user?: User): P
     }
   }
 
-  // Legacy fallback: only used for an account that already belongs to no
-  // workspace. New registrations never call this to join automatically.
+  // Legacy fallback for an already-provisioned account only. New accounts
+  // must explicitly request a workspace using its Workspace ID.
   const sharedWorkspace = await findDefaultWorkspace()
   if (sharedWorkspace && userProfile?.defaultWorkspaceId) {
     await setWorkspaceMember(
@@ -123,7 +123,6 @@ export async function initializeDefaultWorkspace(userId: string, user?: User): P
       user,
       'active',
     )
-    await setDefaultWorkspace(userId, sharedWorkspace.id)
     return sharedWorkspace
   }
 
@@ -150,7 +149,10 @@ export async function requestWorkspaceMembership(
       await setDefaultWorkspace(user.uid, normalizedWorkspaceId)
       return existing
     }
-    if (existing.status === 'pending' || existing.status === 'invited') return existing
+    if (existing.status === 'pending' || existing.status === 'invited') {
+      await setDefaultWorkspace(user.uid, normalizedWorkspaceId)
+      return existing
+    }
     if (existing.status === 'suspended') throw new Error('Your membership in this workspace is suspended.')
     if (existing.status === 'rejected') throw new Error('Your previous request was rejected. Please contact a workspace administrator.')
   }
@@ -169,6 +171,10 @@ export async function requestWorkspaceMembership(
     updatedAt: serverTimestamp(),
   })
 
+  // The user may know which workspace they requested, but this does NOT
+  // grant access. All application data still requires an active membership.
+  await setDefaultWorkspace(user.uid, normalizedWorkspaceId)
+
   const createdSnapshot = await getDoc(memberRef)
   return { id: createdSnapshot.id, ...createdSnapshot.data() } as WorkspaceMember
 }
@@ -186,10 +192,6 @@ export async function approveWorkspaceMember(
     joinedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
-
-  // The member's next workspace refresh will now resolve this workspace.
-  // Store the default workspace only after approval, never while pending.
-  await setDefaultWorkspace(userId, workspaceId)
 }
 
 export async function rejectWorkspaceMember(workspaceId: string, userId: string): Promise<void> {
