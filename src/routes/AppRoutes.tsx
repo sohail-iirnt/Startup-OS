@@ -6,6 +6,7 @@ import AuthTest from '../pages/AuthTest'
 import Login from '../pages/Login'
 import Register from '../pages/Register'
 import ForgotPassword from '../pages/ForgotPassword'
+import PendingApproval from '../pages/PendingApproval'
 import ProtectedRoute from './ProtectedRoute'
 import Websites from '../pages/Websites'
 import WebsiteDetails from '../pages/WebsiteDetails'
@@ -23,6 +24,9 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route element={<ProtectedRoute allowPendingApproval />}>
+        <Route path="/pending-approval" element={<PendingApproval />} />
+      </Route>
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
           <Route path="/" element={<Dashboard />} />
