@@ -3,11 +3,26 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // --------------------------------------------------
+    // USERS
+    // --------------------------------------------------
+
+    // User profiles contain the identity information needed
+    // across the workspace: name, email and profile photo.
+    // Authenticated workspace users may read profiles so
+    // assignments and team lists can display real names.
     match /users/{userId} {
-      allow read, create, update: if request.auth != null
+      allow read: if request.auth != null;
+
+      allow create, update: if request.auth != null
         && request.auth.uid == userId;
+
       allow delete: if false;
     }
+
+    // --------------------------------------------------
+    // WORKSPACES
+    // --------------------------------------------------
 
     match /workspaces/{workspaceId} {
       allow create: if request.auth != null;
@@ -19,6 +34,10 @@ service cloud.firestore {
         allow delete: if false;
       }
     }
+
+    // --------------------------------------------------
+    // WEBSITES / APPS
+    // --------------------------------------------------
 
     match /websites/{websiteId} {
       allow create: if request.auth != null
@@ -39,33 +58,51 @@ service cloud.firestore {
         && resource.data.workspaceId != '';
     }
 
+    // --------------------------------------------------
+    // CLIENTS
+    // --------------------------------------------------
+
     match /clients/{clientId} {
       allow create: if request.auth != null
         && request.resource.data.workspaceId is string
         && request.resource.data.workspaceId != '';
+
       allow read: if request.auth != null
         && resource.data.workspaceId is string
         && resource.data.workspaceId != '';
+
       allow update: if request.auth != null
         && resource.data.workspaceId == request.resource.data.workspaceId;
+
       allow delete: if request.auth != null
         && resource.data.workspaceId is string
         && resource.data.workspaceId != '';
     }
 
+    // --------------------------------------------------
+    // PROJECTS
+    // --------------------------------------------------
+
     match /projects/{projectId} {
       allow create: if request.auth != null
         && request.resource.data.workspaceId is string
         && request.resource.data.workspaceId != '';
+
       allow read: if request.auth != null
         && resource.data.workspaceId is string
         && resource.data.workspaceId != '';
+
       allow update: if request.auth != null
         && resource.data.workspaceId == request.resource.data.workspaceId;
+
       allow delete: if request.auth != null
         && resource.data.workspaceId is string
         && resource.data.workspaceId != '';
     }
+
+    // --------------------------------------------------
+    // TASKS
+    // --------------------------------------------------
 
     match /tasks/{taskId} {
       allow create: if request.auth != null
@@ -84,6 +121,10 @@ service cloud.firestore {
         && resource.data.workspaceId is string
         && resource.data.workspaceId != '';
     }
+
+    // --------------------------------------------------
+    // DEFAULT DENY
+    // --------------------------------------------------
 
     match /{document=**} {
       allow read, write: if false;
