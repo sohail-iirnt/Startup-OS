@@ -687,7 +687,7 @@ function Websites() {
           open={modalOpen}
           saving={saving}
           onClose={closeModal}
-          onSave={handleSave}
+          onSubmit={handleSave}
         />
       )}
     </div>
@@ -768,6 +768,26 @@ function TableHead({
     <th className="pb-3 pr-4 text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--os-text-muted)]">
       {children}
     </th>
+  )
+}
+
+function InfoItem({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] uppercase tracking-[0.12em] text-[var(--os-text-muted)]">
+        {label}
+      </p>
+
+      <p className="mt-1 truncate text-xs font-medium text-[var(--os-text-secondary)]">
+        {value}
+      </p>
+    </div>
   )
 }
 
