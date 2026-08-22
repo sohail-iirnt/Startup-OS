@@ -1,6 +1,7 @@
 import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where, type DocumentData } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
 import type { CreateProjectInput, Project } from '../types/project'
+import { getWorkspaceMember } from './workspaceService'
 
 const COLLECTION = 'projects'
 
@@ -45,13 +46,9 @@ function mapProject(id: string, data: DocumentData): Project {
 function normalize(input: CreateProjectInput) {
   const budget = Number(input.budget)
   const projectValue = Number(input.projectValue)
-
   if (!input.name.trim()) throw new Error('Project name is required.')
   if (!input.clientId) throw new Error('Please select a client.')
-  if (!Number.isFinite(budget) || budget < 0 || !Number.isFinite(projectValue) || projectValue < 0) {
-    throw new Error('Budget and project value cannot be negative.')
-  }
-
+  if (!Number.isFinite(budget) || budget < 0 || !Number.isFinite(projectValue) || projectValue < 0) throw new Error('Budget and project value cannot be negative.')
   return {
     ...input,
     name: input.name.trim(),
@@ -70,7 +67,13 @@ function normalize(input: CreateProjectInput) {
 
 export async function getProjects(workspaceId: string) {
   if (!workspaceId) return []
-  const snapshot = await getDocs(query(collection(db, COLLECTION), where('workspaceId', '==', workspaceId)))
+  const currentUser = auth.currentUser
+  const member = currentUser ? await getWorkspaceMember(workspaceId, currentUser.uid) : null
+  const projectsRef = collection(db, COLLECTION)
+  const projectsQuery = member?.role === 'intern'
+    ? query(projectsRef, where('workspaceId', '==', workspaceId), where('ownerId', '==', currentUser?.uid ?? ''))
+    : query(projectsRef, where('workspaceId', '==', workspaceId))
+  const snapshot = await getDocs(projectsQuery)
   return snapshot.docs.map((item) => mapProject(item.id, item.data())).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 }
 
