@@ -22,8 +22,8 @@ function RegisterWorkspace() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    if (!authLoading && user) navigate('/pending-approval', { replace: true })
-  }, [authLoading, user, navigate])
+    if (!authLoading && !loading && user) navigate('/pending-approval', { replace: true })
+  }, [authLoading, loading, user, navigate])
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
