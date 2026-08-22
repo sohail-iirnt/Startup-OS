@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 
 import { useAuth } from '../context/useAuth'
 import { registerWithEmail } from '../services/authService'
+import { createUserProfile } from '../services/userService'
 import { requestWorkspaceMembership } from '../services/workspaceService'
 import type { UserRole } from '../types/common'
 
@@ -37,6 +38,7 @@ function RegisterWorkspace() {
     try {
       setLoading(true)
       const registeredUser = await registerWithEmail(name.trim(), email.trim(), password)
+      await createUserProfile(registeredUser)
       await requestWorkspaceMembership(workspaceId.trim(), registeredUser, requestedRole)
       navigate('/pending-approval', { replace: true })
     } catch (submitError) {
