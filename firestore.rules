@@ -4,19 +4,61 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // --------------------------------------------------
+    // SHARED ACCESS HELPERS
+    // --------------------------------------------------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function memberPath(workspaceId, userId) {
+      return /databases/$(database)/documents/workspaces/$(workspaceId)/members/$(userId);
+    }
+
+    function hasActiveMembership(workspaceId) {
+      return signedIn()
+        && exists(memberPath(workspaceId, request.auth.uid))
+        && get(memberPath(workspaceId, request.auth.uid)).data.status == 'active';
+    }
+
+    function hasRole(workspaceId, role) {
+      return hasActiveMembership(workspaceId)
+        && get(memberPath(workspaceId, request.auth.uid)).data.role == role;
+    }
+
+    function isOwner(workspaceId) {
+      return hasRole(workspaceId, 'owner');
+    }
+
+    function isAdmin(workspaceId) {
+      return hasRole(workspaceId, 'admin');
+    }
+
+    function isManager(workspaceId) {
+      return hasRole(workspaceId, 'manager');
+    }
+
+    function canApproveMembers(workspaceId) {
+      return isOwner(workspaceId) || isAdmin(workspaceId) || isManager(workspaceId);
+    }
+
+    function canManage(workspaceId) {
+      return isOwner(workspaceId) || isAdmin(workspaceId);
+    }
+
+    function canOperate(workspaceId) {
+      return isOwner(workspaceId) || isAdmin(workspaceId) || isManager(workspaceId);
+    }
+
+    // --------------------------------------------------
     // USERS
     // --------------------------------------------------
 
-    // User profiles contain the identity information needed
-    // across the workspace: name, email and profile photo.
-    // Authenticated workspace users may read profiles so
-    // assignments and team lists can display real names.
     match /users/{userId} {
-      allow read: if request.auth != null;
-
-      allow create, update: if request.auth != null
-        && request.auth.uid == userId;
-
+      // Users can read profiles so task/project/member assignment can
+      // display real names. A user may only create/update their own profile.
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.auth.uid == userId;
       allow delete: if false;
     }
 
@@ -25,12 +67,39 @@ service cloud.firestore {
     // --------------------------------------------------
 
     match /workspaces/{workspaceId} {
-      allow create: if request.auth != null;
-      allow read, update: if request.auth != null;
+      // A registered user may look up a workspace by ID during onboarding.
+      // Operational data remains protected by membership checks below.
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if canManage(workspaceId);
       allow delete: if false;
 
+      // ------------------------------------------------
+      // WORKSPACE MEMBERS
+      // ------------------------------------------------
+
       match /members/{memberId} {
-        allow create, read, update: if request.auth != null;
+        // A new authenticated account may create ONLY its own pending
+        // membership request. It cannot create an active/admin membership.
+        allow create: if signedIn()
+          && request.auth.uid == memberId
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.workspaceId == workspaceId
+          && request.resource.data.status == 'pending';
+
+        // A user may read its own request. Approved managers/admins/owners
+        // may read members so they can manage workspace access.
+        allow read: if signedIn()
+          && (
+            request.auth.uid == memberId
+            || canApproveMembers(workspaceId)
+          );
+
+        // Only owner/admin/manager can approve, reject, suspend or change
+        // a member's role. A member cannot approve itself.
+        allow update: if canApproveMembers(workspaceId)
+          && memberId != request.auth.uid;
+
         allow delete: if false;
       }
     }
@@ -40,22 +109,17 @@ service cloud.firestore {
     // --------------------------------------------------
 
     match /websites/{websiteId} {
-      allow create: if request.auth != null
+      allow create: if signedIn()
         && request.resource.data.workspaceId is string
-        && request.resource.data.workspaceId != '';
+        && request.resource.data.workspaceId != ''
+        && canOperate(request.resource.data.workspaceId);
 
-      allow read: if request.auth != null
-        && resource.data.workspaceId is string
-        && resource.data.workspaceId != '';
+      allow read: if hasActiveMembership(resource.data.workspaceId);
 
-      allow update: if request.auth != null
-        && resource.data.workspaceId == request.resource.data.workspaceId
-        && resource.data.workspaceId is string
-        && resource.data.workspaceId != '';
+      allow update: if canOperate(resource.data.workspaceId)
+        && resource.data.workspaceId == request.resource.data.workspaceId;
 
-      allow delete: if request.auth != null
-        && resource.data.workspaceId is string
-        && resource.data.workspaceId != '';
+      allow delete: if canManage(resource.data.workspaceId);
     }
 
     // --------------------------------------------------
@@ -63,20 +127,17 @@ service cloud.firestore {
     // --------------------------------------------------
 
     match /clients/{clientId} {
-      allow create: if request.auth != null
+      allow create: if signedIn()
         && request.resource.data.workspaceId is string
-        && request.resource.data.workspaceId != '';
+        && request.resource.data.workspaceId != ''
+        && canOperate(request.resource.data.workspaceId);
 
-      allow read: if request.auth != null
-        && resource.data.workspaceId is string
-        && resource.data.workspaceId != '';
+      allow read: if hasActiveMembership(resource.data.workspaceId);
 
-      allow update: if request.auth != null
+      allow update: if canOperate(resource.data.workspaceId)
         && resource.data.workspaceId == request.resource.data.workspaceId;
 
-      allow delete: if request.auth != null
-        && resource.data.workspaceId is string
-        && resource.data.workspaceId != '';
+      allow delete: if canManage(resource.data.workspaceId);
     }
 
     // --------------------------------------------------
@@ -84,20 +145,27 @@ service cloud.firestore {
     // --------------------------------------------------
 
     match /projects/{projectId} {
-      allow create: if request.auth != null
+      allow create: if signedIn()
         && request.resource.data.workspaceId is string
-        && request.resource.data.workspaceId != '';
+        && request.resource.data.workspaceId != ''
+        && canOperate(request.resource.data.workspaceId);
 
-      allow read: if request.auth != null
-        && resource.data.workspaceId is string
-        && resource.data.workspaceId != '';
+      allow read: if hasActiveMembership(resource.data.workspaceId);
 
-      allow update: if request.auth != null
-        && resource.data.workspaceId == request.resource.data.workspaceId;
+      // Interns/members may update only a project assigned to them through
+      // ownerId. Managers/admins/owners can operate on workspace projects.
+      allow update: if resource.data.workspaceId == request.resource.data.workspaceId
+        && (
+          canOperate(resource.data.workspaceId)
+          || (
+            hasActiveMembership(resource.data.workspaceId)
+            && get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role in ['member', 'intern']
+            && resource.data.ownerId == request.auth.uid
+            && request.resource.data.ownerId == resource.data.ownerId
+          )
+        );
 
-      allow delete: if request.auth != null
-        && resource.data.workspaceId is string
-        && resource.data.workspaceId != '';
+      allow delete: if canManage(resource.data.workspaceId);
     }
 
     // --------------------------------------------------
@@ -105,21 +173,34 @@ service cloud.firestore {
     // --------------------------------------------------
 
     match /tasks/{taskId} {
-      allow create: if request.auth != null
+      allow create: if signedIn()
         && request.resource.data.workspaceId is string
         && request.resource.data.workspaceId != ''
-        && request.resource.data.createdBy == request.auth.uid;
+        && request.resource.data.createdBy == request.auth.uid
+        && canOperate(request.resource.data.workspaceId);
 
-      allow read: if request.auth != null
-        && resource.data.workspaceId is string
-        && resource.data.workspaceId != '';
+      // Interns can read only their assigned tasks. Other active roles can
+      // read all workspace tasks according to their role.
+      allow read: if hasActiveMembership(resource.data.workspaceId)
+        && (
+          get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role != 'intern'
+          || resource.data.assigneeId == request.auth.uid
+        );
 
-      allow update: if request.auth != null
-        && resource.data.workspaceId == request.resource.data.workspaceId;
+      // Managers/admins/owners can update all tasks. Members and interns can
+      // update only tasks assigned to themselves.
+      allow update: if resource.data.workspaceId == request.resource.data.workspaceId
+        && (
+          canOperate(resource.data.workspaceId)
+          || (
+            hasActiveMembership(resource.data.workspaceId)
+            && get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role in ['member', 'intern']
+            && resource.data.assigneeId == request.auth.uid
+            && request.resource.data.assigneeId == resource.data.assigneeId
+          )
+        );
 
-      allow delete: if request.auth != null
-        && resource.data.workspaceId is string
-        && resource.data.workspaceId != '';
+      allow delete: if canOperate(resource.data.workspaceId);
     }
 
     // --------------------------------------------------
