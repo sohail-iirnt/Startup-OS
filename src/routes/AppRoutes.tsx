@@ -13,6 +13,7 @@ import Clients from '../pages/Clients'
 import ClientDetails from '../pages/ClientDetails'
 import Projects from '../pages/Projects'
 import ProjectDetails from '../pages/ProjectDetails'
+import Tasks from '../pages/Tasks'
 import WorkspaceSettings from '../pages/WorkspaceSettings'
 
 function AppRoutes() {
@@ -30,7 +31,7 @@ function AppRoutes() {
           <Route path="/projects/:projectId" element={<ProjectDetails />} />
           <Route path="/websites" element={<Websites />} />
           <Route path="/websites/:websiteId" element={<WebsiteDetails />} />
-          <Route path="/tasks" element={<PlaceholderPage title="Tasks" description="Manage priorities, assignments, deadlines, recurring work, and execution." />} />
+          <Route path="/tasks" element={<Tasks />} />
           <Route path="/calendar" element={<PlaceholderPage title="Calendar" description="Centralize meetings, deadlines, events, and important business dates." />} />
           <Route path="/finance" element={<PlaceholderPage title="Finance" description="Track revenue, expenses, transactions, financial health, and reporting." />} />
           <Route path="/ideas" element={<PlaceholderPage title="Ideas" description="Capture, organize, evaluate, and develop ideas without losing them." />} />
@@ -43,4 +44,5 @@ function AppRoutes() {
     </Routes>
   )
 }
+
 export default AppRoutes
