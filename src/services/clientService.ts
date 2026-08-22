@@ -1,0 +1,112 @@
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+  type DocumentData,
+} from 'firebase/firestore'
+
+import { auth, db } from '../lib/firebase'
+import type { Client, CreateClientInput } from '../types/client'
+
+const CLIENTS_COLLECTION = 'clients'
+
+function getCurrentUserId() {
+  const userId = auth.currentUser?.uid
+  if (!userId) throw new Error('You must be signed in to manage clients.')
+  return userId
+}
+
+function mapClient(id: string, data: DocumentData): Client {
+  return {
+    id,
+    workspaceId: data.workspaceId ?? '',
+    createdBy: data.createdBy ?? '',
+    type: data.type ?? 'individual',
+    name: data.name ?? '',
+    companyName: data.companyName ?? '',
+    email: data.email ?? '',
+    phone: data.phone ?? '',
+    website: data.website ?? '',
+    address: data.address ?? '',
+    status: data.status ?? 'active',
+    source: data.source ?? '',
+    notes: data.notes ?? '',
+    deletedAt: data.deletedAt?.toDate ? data.deletedAt.toDate() : null,
+    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : new Date(),
+    updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : new Date(),
+  }
+}
+
+function normalizeInput(input: CreateClientInput) {
+  return {
+    type: input.type,
+    name: input.name.trim(),
+    companyName: input.companyName.trim(),
+    email: input.email.trim(),
+    phone: input.phone.trim(),
+    website: input.website.trim(),
+    address: input.address.trim(),
+    status: input.status,
+    source: input.source.trim(),
+    notes: input.notes.trim(),
+  }
+}
+
+export async function getClients(workspaceId: string): Promise<Client[]> {
+  if (!workspaceId) return []
+  const snapshot = await getDocs(query(collection(db, CLIENTS_COLLECTION), where('workspaceId', '==', workspaceId)))
+  return snapshot.docs.map((item) => mapClient(item.id, item.data())).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+}
+
+export async function getClient(clientId: string, workspaceId: string): Promise<Client | null> {
+  if (!clientId || !workspaceId) return null
+  const snapshot = await getDoc(doc(db, CLIENTS_COLLECTION, clientId))
+  if (!snapshot.exists()) return null
+  const client = mapClient(snapshot.id, snapshot.data())
+  return client.workspaceId === workspaceId ? client : null
+}
+
+export async function createClient(workspaceId: string, input: CreateClientInput): Promise<Client> {
+  if (!workspaceId) throw new Error('Workspace is required to create a client.')
+  const createdBy = getCurrentUserId()
+  const normalized = normalizeInput(input)
+  if (!normalized.name) throw new Error('Client name is required.')
+  if (normalized.email && !/^\S+@\S+\.\S+$/.test(normalized.email)) throw new Error('Please enter a valid email address.')
+  const reference = await addDoc(collection(db, CLIENTS_COLLECTION), { workspaceId, createdBy, ...normalized, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
+  const created = await getDoc(reference)
+  if (!created.exists()) throw new Error('Client was created but could not be loaded.')
+  return mapClient(created.id, created.data())
+}
+
+export async function updateClient(clientId: string, workspaceId: string, input: CreateClientInput): Promise<Client> {
+  if (!clientId || !workspaceId) throw new Error('Client and workspace are required.')
+  getCurrentUserId()
+  const normalized = normalizeInput(input)
+  if (!normalized.name) throw new Error('Client name is required.')
+  if (normalized.email && !/^\S+@\S+\.\S+$/.test(normalized.email)) throw new Error('Please enter a valid email address.')
+  const reference = doc(db, CLIENTS_COLLECTION, clientId)
+  const existing = await getDoc(reference)
+  if (!existing.exists()) throw new Error('Client could not be found.')
+  if (existing.data().workspaceId !== workspaceId) throw new Error('This client does not belong to the active workspace.')
+  await updateDoc(reference, { ...normalized, updatedAt: serverTimestamp() })
+  const updated = await getDoc(reference)
+  if (!updated.exists()) throw new Error('Client was updated but could not be loaded.')
+  return mapClient(updated.id, updated.data())
+}
+
+export async function deleteClient(clientId: string, workspaceId: string): Promise<void> {
+  if (!clientId || !workspaceId) throw new Error('Client and workspace are required.')
+  getCurrentUserId()
+  const reference = doc(db, CLIENTS_COLLECTION, clientId)
+  const existing = await getDoc(reference)
+  if (!existing.exists()) throw new Error('Client could not be found.')
+  if (existing.data().workspaceId !== workspaceId) throw new Error('This client does not belong to the active workspace.')
+  await deleteDoc(reference)
+}

@@ -9,6 +9,8 @@ import ForgotPassword from '../pages/ForgotPassword'
 import ProtectedRoute from './ProtectedRoute'
 import Websites from '../pages/Websites'
 import WebsiteDetails from '../pages/WebsiteDetails'
+import Clients from '../pages/Clients'
+import ClientDetails from '../pages/ClientDetails'
 import WorkspaceSettings from '../pages/WorkspaceSettings'
 
 function AppRoutes() {
@@ -22,7 +24,8 @@ function AppRoutes() {
         <Route element={<AppShell />}>
           <Route path="/" element={<Dashboard />} />
 
-          <Route path="/clients" element={<PlaceholderPage title="Clients" description="Manage relationships, contacts, communication history, and client information." />} />
+          <Route path="/clients" element={<Clients />} />
+          <Route path="/clients/:clientId" element={<ClientDetails />} />
           <Route path="/projects" element={<PlaceholderPage title="Projects" description="Track projects, milestones, progress, ownership, deadlines, and delivery." />} />
 
           <Route path="/websites" element={<Websites />} />
