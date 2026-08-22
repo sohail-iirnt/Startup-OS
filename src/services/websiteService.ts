@@ -32,16 +32,12 @@ function mapWebsite(
     type: data.type ?? 'website',
     status: data.status ?? 'in-development',
     liveUrl: data.liveUrl ?? '',
-    hostingProvider:
-      data.hostingProvider ?? '',
-    developmentAmount:
-      Number(data.developmentAmount ?? 0),
-    maintenanceOpted:
-      Boolean(data.maintenanceOpted),
-    monthlyMaintenanceCharge:
-      Number(
-        data.monthlyMaintenanceCharge ?? 0,
-      ),
+    hostingProvider: data.hostingProvider ?? '',
+    developmentAmount: Number(data.developmentAmount ?? 0),
+    maintenanceOpted: Boolean(data.maintenanceOpted),
+    monthlyMaintenanceCharge: Number(
+      data.monthlyMaintenanceCharge ?? 0,
+    ),
     notes: data.notes ?? '',
     workspaceId: data.workspaceId ?? '',
     createdAt: data.createdAt?.toDate
@@ -50,6 +46,35 @@ function mapWebsite(
     updatedAt: data.updatedAt?.toDate
       ? data.updatedAt.toDate()
       : new Date(),
+  }
+}
+
+function normalizeInput(
+  input: CreateWebsiteInput,
+): CreateWebsiteInput {
+  const developmentAmount = Math.max(
+    0,
+    Number(input.developmentAmount) || 0,
+  )
+
+  const monthlyMaintenanceCharge = input.maintenanceOpted
+    ? Math.max(
+        0,
+        Number(input.monthlyMaintenanceCharge) || 0,
+      )
+    : 0
+
+  return {
+    name: input.name.trim(),
+    clientName: input.clientName.trim(),
+    type: input.type,
+    status: input.status,
+    liveUrl: input.liveUrl.trim(),
+    hostingProvider: input.hostingProvider.trim(),
+    developmentAmount,
+    maintenanceOpted: input.maintenanceOpted,
+    monthlyMaintenanceCharge,
+    notes: input.notes.trim(),
   }
 }
 
@@ -67,30 +92,22 @@ export async function getWebsites(
 
   const websitesQuery = query(
     websitesRef,
-    where(
-      'workspaceId',
-      '==',
-      workspaceId,
-    ),
+    where('workspaceId', '==', workspaceId),
     orderBy('createdAt', 'desc'),
   )
 
-  const snapshot =
-    await getDocs(websitesQuery)
+  const snapshot = await getDocs(websitesQuery)
 
-  return snapshot.docs.map(
-    (document) =>
-      mapWebsite(
-        document.id,
-        document.data(),
-      ),
+  return snapshot.docs.map((document) =>
+    mapWebsite(document.id, document.data()),
   )
 }
 
 export async function getWebsite(
+  workspaceId: string,
   websiteId: string,
 ): Promise<Website | null> {
-  if (!websiteId) {
+  if (!workspaceId || !websiteId) {
     return null
   }
 
@@ -100,17 +117,19 @@ export async function getWebsite(
     websiteId,
   )
 
-  const snapshot =
-    await getDoc(websiteRef)
+  const snapshot = await getDoc(websiteRef)
 
   if (!snapshot.exists()) {
     return null
   }
 
-  return mapWebsite(
-    snapshot.id,
-    snapshot.data(),
-  )
+  const data = snapshot.data()
+
+  if (data.workspaceId !== workspaceId) {
+    return null
+  }
+
+  return mapWebsite(snapshot.id, data)
 }
 
 export async function createWebsite(
@@ -123,7 +142,9 @@ export async function createWebsite(
     )
   }
 
-  if (!input.name.trim()) {
+  const normalizedInput = normalizeInput(input)
+
+  if (!normalizedInput.name) {
     throw new Error(
       'Website or app name is required.',
     )
@@ -134,34 +155,17 @@ export async function createWebsite(
     WEBSITES_COLLECTION,
   )
 
-  const documentReference =
-    await addDoc(websitesRef, {
+  const documentReference = await addDoc(
+    websitesRef,
+    {
       workspaceId,
-      name: input.name.trim(),
-      clientName:
-        input.clientName.trim(),
-      type: input.type,
-      status: input.status,
-      liveUrl: input.liveUrl.trim(),
-      hostingProvider:
-        input.hostingProvider.trim(),
-      developmentAmount:
-        Number(input.developmentAmount) || 0,
-      maintenanceOpted:
-        input.maintenanceOpted,
-      monthlyMaintenanceCharge:
-        input.maintenanceOpted
-          ? Number(
-              input.monthlyMaintenanceCharge,
-            ) || 0
-          : 0,
-      notes: input.notes.trim(),
+      ...normalizedInput,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    })
+    },
+  )
 
-  const created =
-    await getDoc(documentReference)
+  const created = await getDoc(documentReference)
 
   if (!created.exists()) {
     throw new Error(
@@ -169,23 +173,27 @@ export async function createWebsite(
     )
   }
 
-  return mapWebsite(
-    created.id,
-    created.data(),
-  )
+  return mapWebsite(created.id, created.data())
 }
 
 export async function updateWebsite(
+  workspaceId: string,
   websiteId: string,
   input: CreateWebsiteInput,
 ): Promise<void> {
-  if (!websiteId) {
+  if (!workspaceId) {
     throw new Error(
-      'Website ID is required.',
+      'Workspace is required to update a website.',
     )
   }
 
-  if (!input.name.trim()) {
+  if (!websiteId) {
+    throw new Error('Website ID is required.')
+  }
+
+  const normalizedInput = normalizeInput(input)
+
+  if (!normalizedInput.name) {
     throw new Error(
       'Website or app name is required.',
     )
@@ -197,37 +205,36 @@ export async function updateWebsite(
     websiteId,
   )
 
+  const existing = await getDoc(websiteRef)
+
+  if (!existing.exists()) {
+    throw new Error('Website was not found.')
+  }
+
+  if (existing.data().workspaceId !== workspaceId) {
+    throw new Error(
+      'You do not have access to this website.',
+    )
+  }
+
   await updateDoc(websiteRef, {
-    name: input.name.trim(),
-    clientName:
-      input.clientName.trim(),
-    type: input.type,
-    status: input.status,
-    liveUrl: input.liveUrl.trim(),
-    hostingProvider:
-      input.hostingProvider.trim(),
-    developmentAmount:
-      Number(input.developmentAmount) || 0,
-    maintenanceOpted:
-      input.maintenanceOpted,
-    monthlyMaintenanceCharge:
-      input.maintenanceOpted
-        ? Number(
-            input.monthlyMaintenanceCharge,
-          ) || 0
-        : 0,
-    notes: input.notes.trim(),
+    ...normalizedInput,
     updatedAt: serverTimestamp(),
   })
 }
 
 export async function deleteWebsite(
+  workspaceId: string,
   websiteId: string,
 ): Promise<void> {
-  if (!websiteId) {
+  if (!workspaceId) {
     throw new Error(
-      'Website ID is required.',
+      'Workspace is required to delete a website.',
     )
+  }
+
+  if (!websiteId) {
+    throw new Error('Website ID is required.')
   }
 
   const websiteRef = doc(
@@ -235,6 +242,18 @@ export async function deleteWebsite(
     WEBSITES_COLLECTION,
     websiteId,
   )
+
+  const existing = await getDoc(websiteRef)
+
+  if (!existing.exists()) {
+    throw new Error('Website was not found.')
+  }
+
+  if (existing.data().workspaceId !== workspaceId) {
+    throw new Error(
+      'You do not have access to this website.',
+    )
+  }
 
   await deleteDoc(websiteRef)
 }
