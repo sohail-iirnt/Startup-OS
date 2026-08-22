@@ -3,6 +3,7 @@ import { CheckCircle2, Clock3, ListTodo, Plus, Search, UserRound } from 'lucide-
 
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import TaskModal from '../components/tasks/TaskModal'
 import { useAuth } from '../context/useAuth'
 import { useWorkspace } from '../context/useWorkspace'
@@ -60,6 +61,7 @@ function Tasks() {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [modalInstance, setModalInstance] = useState(0)
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null)
 
   async function loadTasks() {
     if (!workspace?.id) {
@@ -123,18 +125,35 @@ function Tasks() {
     }
   }
 
-  async function handleDelete(task: Task) {
-    if (!workspace?.id || deletingId) {
+  function requestDelete(task: Task) {
+    if (deletingId) {
       return
     }
 
-    if (!window.confirm(`Delete “${task.title}”? This action cannot be undone.`)) {
+    setError('')
+    setTaskToDelete(task)
+  }
+
+  function cancelDelete() {
+    if (deletingId) {
       return
     }
 
-    setDeletingId(task.id)
+    setTaskToDelete(null)
+  }
+
+  async function confirmDelete() {
+    if (!taskToDelete || !workspace?.id || deletingId) {
+      return
+    }
+
+    const taskId = taskToDelete.id
+    setDeletingId(taskId)
+    setError('')
+
     try {
-      await deleteTask(task.id, workspace.id)
+      await deleteTask(taskId, workspace.id)
+      setTaskToDelete(null)
       await loadTasks()
     } catch (deleteError) {
       setError(
@@ -303,10 +322,10 @@ function Tasks() {
                     <Button
                       type="button"
                       variant="secondary"
-                      onClick={() => handleDelete(task)}
+                      onClick={() => requestDelete(task)}
                       disabled={deletingId === task.id}
                     >
-                      {deletingId === task.id ? 'Deleting...' : 'Delete'}
+                      Delete
                     </Button>
                   </div>
                 </div>
@@ -327,6 +346,29 @@ function Tasks() {
           onSubmit={handleSave}
         />
       )}
+
+      <ConfirmDialog
+        open={Boolean(taskToDelete)}
+        title="Delete task?"
+        description={
+          taskToDelete ? (
+            <>
+              You are about to permanently delete{' '}
+              <strong className="font-semibold text-[var(--os-text)]">
+                “{taskToDelete.title}”
+              </strong>
+              . This action cannot be undone.
+            </>
+          ) : (
+            ''
+          )
+        }
+        confirmLabel="Delete Task"
+        cancelLabel="Keep Task"
+        loading={Boolean(deletingId)}
+        onConfirm={() => void confirmDelete()}
+        onCancel={cancelDelete}
+      />
     </div>
   )
 }
