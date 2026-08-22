@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import {
   Activity,
@@ -611,9 +612,10 @@ function Websites() {
                         <td className="py-4 pr-4">
                           {website.liveUrl ? (
                             <a
-                              href={
-                                website.liveUrl
-                              }
+							  href={website.liveUrl}
+							  onClick={(event) =>
+								event.stopPropagation()
+							  }
                               target="_blank"
                               rel="noreferrer"
                               className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--os-accent)] hover:text-[var(--os-text)]"
@@ -806,8 +808,26 @@ function WebsiteCard({
   onDelete: (website: Website) => void
   deleting: boolean
 }) {
+	const navigate = useNavigate()
+	
   return (
-    <div className="group rounded-2xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--os-border-strong)] hover:shadow-[var(--os-shadow-md)]">
+    <div
+  role="link"
+  tabIndex={0}
+  onClick={() =>
+    navigate(`/websites/${website.id}`)
+  }
+  onKeyDown={(event) => {
+    if (
+      event.key === 'Enter' ||
+      event.key === ' '
+    ) {
+      event.preventDefault()
+      navigate(`/websites/${website.id}`)
+    }
+  }}
+  className="group cursor-pointer rounded-2xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--os-border-strong)] hover:shadow-[var(--os-shadow-md)]"
+>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--os-accent-soft)] text-[var(--os-accent)]">
@@ -876,7 +896,10 @@ function WebsiteCard({
 
           <button
             type="button"
-            onClick={() => onEdit(website)}
+            onClick={(event) => {
+			  event.stopPropagation()
+			  onEdit(website)
+		}}
             disabled={deleting}
             aria-label={`Edit ${website.name}`}
             className="os-focus-ring flex h-9 w-9 items-center justify-center rounded-lg text-[var(--os-text-muted)] transition-colors hover:bg-[var(--os-surface-hover)] hover:text-[var(--os-accent)] disabled:cursor-not-allowed disabled:opacity-50"
@@ -886,7 +909,10 @@ function WebsiteCard({
 
           <button
             type="button"
-            onClick={() => onDelete(website)}
+            onClick={(event) => {
+			event.stopPropagation()
+			onDelete(website)
+			}}
             disabled={deleting}
             aria-label={`Delete ${website.name}`}
             className="os-focus-ring flex h-9 w-9 items-center justify-center rounded-lg text-[var(--os-text-muted)] transition-colors hover:bg-[rgba(255,100,124,0.08)] hover:text-[var(--os-danger)] disabled:cursor-not-allowed disabled:opacity-50"
