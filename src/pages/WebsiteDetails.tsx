@@ -16,6 +16,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import WebsiteModal from '../components/websites/WebsiteModal'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { useWorkspace } from '../context/useWorkspace'
 import {
   deleteWebsite,
@@ -99,6 +100,7 @@ function WebsiteDetails() {
   const [modalOpen, setModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [modalInstance, setModalInstance] = useState(0)
 
   useEffect(() => {
@@ -204,16 +206,17 @@ function WebsiteDetails() {
     }
   }
 
-  async function handleDelete() {
-    if (!website || !workspace?.id || deleting) {
+  function handleDeleteRequest() {
+    if (!website || deleting || saving) {
       return
     }
 
-    const confirmed = window.confirm(
-      `Delete “${website.name}”? This action cannot be undone.`,
-    )
+    setError('')
+    setDeleteDialogOpen(true)
+  }
 
-    if (!confirmed) {
+  async function confirmDelete() {
+    if (!website || !workspace?.id || deleting) {
       return
     }
 
@@ -222,6 +225,7 @@ function WebsiteDetails() {
 
     try {
       await deleteWebsite(website.id, workspace.id)
+      setDeleteDialogOpen(false)
       navigate('/websites', { replace: true })
     } catch (deleteError) {
       setError(
@@ -230,6 +234,7 @@ function WebsiteDetails() {
           : 'Failed to delete the website.',
       )
       setDeleting(false)
+      setDeleteDialogOpen(false)
     }
   }
 
@@ -330,7 +335,7 @@ function WebsiteDetails() {
           <Button
             type="button"
             variant="secondary"
-            onClick={handleDelete}
+            onClick={handleDeleteRequest}
             disabled={deleting || saving}
           >
             <Trash2 size={15} />
@@ -522,6 +527,30 @@ function WebsiteDetails() {
         saving={saving}
         onClose={closeEditModal}
         onSubmit={handleSave}
+      />
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        title="Delete Website / App?"
+        description={
+          <>
+            Are you sure you want to delete{' '}
+            <strong className="font-semibold text-[var(--os-text)]">
+              {website.name}
+            </strong>
+            ? This action cannot be undone.
+          </>
+        }
+        confirmLabel="Delete Website"
+        loading={deleting}
+        onCancel={() => {
+          if (!deleting) {
+            setDeleteDialogOpen(false)
+          }
+        }}
+        onConfirm={() => {
+          void confirmDelete()
+        }}
       />
     </div>
   )
