@@ -16,6 +16,7 @@ import Projects from '../pages/Projects'
 import ProjectDetails from '../pages/ProjectDetails'
 import Tasks from '../pages/Tasks'
 import Team from '../pages/Team'
+import MemberApprovals from '../pages/MemberApprovals'
 import WorkspaceSettings from '../pages/WorkspaceSettings'
 
 function AppRoutes() {
@@ -38,6 +39,7 @@ function AppRoutes() {
           <Route path="/websites/:websiteId" element={<WebsiteDetails />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/team" element={<Team />} />
+          <Route path="/team/approvals" element={<MemberApprovals />} />
           <Route path="/calendar" element={<PlaceholderPage title="Calendar" description="Centralize meetings, deadlines, events, and important business dates." />} />
           <Route path="/finance" element={<PlaceholderPage title="Finance" description="Track revenue, expenses, transactions, financial health, and reporting." />} />
           <Route path="/ideas" element={<PlaceholderPage title="Ideas" description="Capture, organize, evaluate, and develop ideas without losing them." />} />
