@@ -4,7 +4,7 @@ import Dashboard from '../pages/Dashboard'
 import PlaceholderPage from '../pages/PlaceholderPage'
 import AuthTest from '../pages/AuthTest'
 import Login from '../pages/Login'
-import Register from '../pages/Register'
+import RegisterWorkspace from '../pages/RegisterWorkspace'
 import ForgotPassword from '../pages/ForgotPassword'
 import PendingApproval from '../pages/PendingApproval'
 import ProtectedRoute from './ProtectedRoute'
@@ -22,7 +22,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
+      <Route path="/register" element={<RegisterWorkspace />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route element={<ProtectedRoute allowPendingApproval />}>
         <Route path="/pending-approval" element={<PendingApproval />} />
