@@ -48,11 +48,11 @@ export const navigationSections: NavigationSection[] = [
         path: '/projects',
         icon: BriefcaseBusiness,
       },
-		{
-		  label: 'Websites & Apps',
-		  path: '/websites',
-		  icon: Globe,
-		},
+      {
+        label: 'Websites & Apps',
+        path: '/websites',
+        icon: Globe,
+      },
     ],
   },
   {
@@ -62,6 +62,11 @@ export const navigationSections: NavigationSection[] = [
         label: 'Tasks',
         path: '/tasks',
         icon: CheckSquare,
+      },
+      {
+        label: 'Team',
+        path: '/team',
+        icon: Users,
       },
       {
         label: 'Calendar',
