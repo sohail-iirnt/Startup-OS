@@ -4,12 +4,14 @@ import {
   Clock3,
   Mail,
   ShieldCheck,
+  UserPlus,
   UserRound,
   Users,
   Workflow,
 } from 'lucide-react'
 
 import Card from '../components/ui/Card'
+import InviteMemberModal from '../components/members/InviteMemberModal'
 import { useWorkspace } from '../context/useWorkspace'
 import { getWorkspaceMembers } from '../services/memberService'
 import { getTasks } from '../services/taskService'
@@ -41,11 +43,16 @@ function isOverdue(task: Task) {
 }
 
 function Team() {
-  const { workspace, loading: workspaceLoading } = useWorkspace()
+  const {
+    workspace,
+    loading: workspaceLoading,
+    hasPermission,
+  } = useWorkspace()
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [inviteOpen, setInviteOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -110,18 +117,35 @@ function Team() {
     return tasks.filter((task) => task.assigneeId === memberId)
   }
 
+  const canInviteMembers =
+    hasPermission('members.manage') ||
+    hasPermission('members.approve')
+
   return (
     <div className="mx-auto w-full max-w-[1400px] p-4 sm:p-6 lg:p-8">
-      <section className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--os-accent)]">
-          People & Access
-        </p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight text-[var(--os-text)]">
-          Team
-        </h1>
-        <p className="mt-2 max-w-3xl text-sm text-[var(--os-text-secondary)]">
-          Registered workspace members and their current operational workload. Members can be assigned tasks and will become the ownership layer for projects, goals, and other Startup OS operations.
-        </p>
+      <section className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--os-accent)]">
+            People & Access
+          </p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-[var(--os-text)]">
+            Team
+          </h1>
+          <p className="mt-2 max-w-3xl text-sm text-[var(--os-text-secondary)]">
+            Registered workspace members and their current operational workload. Members can be assigned tasks and will become the ownership layer for projects, goals, and other Startup OS operations.
+          </p>
+        </div>
+
+        {canInviteMembers && workspace && (
+          <button
+            type="button"
+            onClick={() => setInviteOpen(true)}
+            className="os-focus-ring inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[var(--os-accent)] px-4 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(139,124,255,0.18)] transition-colors hover:bg-[var(--os-accent-hover)]"
+          >
+            <UserPlus size={16} />
+            Invite Member
+          </button>
+        )}
       </section>
 
       {error && (
@@ -292,39 +316,23 @@ function Team() {
 
                   <div className="grid grid-cols-3 gap-2 border-t border-[var(--os-border)] pt-4">
                     <div className="rounded-xl bg-[var(--os-surface-raised)] p-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--os-text-muted)]">
-                        Active
-                      </p>
-                      <p className="mt-1 text-lg font-semibold text-[var(--os-text)]">
-                        {memberActiveTasks.length}
-                      </p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--os-text-muted)]">Active</p>
+                      <p className="mt-1 text-lg font-semibold text-[var(--os-text)]">{memberActiveTasks.length}</p>
                     </div>
                     <div className="rounded-xl bg-[var(--os-surface-raised)] p-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--os-text-muted)]">
-                        Done
-                      </p>
-                      <p className="mt-1 text-lg font-semibold text-[var(--os-text)]">
-                        {memberCompletedTasks.length}
-                      </p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--os-text-muted)]">Done</p>
+                      <p className="mt-1 text-lg font-semibold text-[var(--os-text)]">{memberCompletedTasks.length}</p>
                     </div>
                     <div className="rounded-xl bg-[var(--os-surface-raised)] p-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--os-text-muted)]">
-                        Overdue
-                      </p>
-                      <p className="mt-1 text-lg font-semibold text-[var(--os-danger)]">
-                        {memberOverdueTasks.length}
-                      </p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--os-text-muted)]">Overdue</p>
+                      <p className="mt-1 text-lg font-semibold text-[var(--os-danger)]">{memberOverdueTasks.length}</p>
                     </div>
                   </div>
 
                   <div className="border-t border-[var(--os-border)] pt-3">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-xs text-[var(--os-text-muted)]">
-                        Task completion
-                      </span>
-                      <span className="text-xs font-semibold text-[var(--os-text-secondary)]">
-                        {completionRate}%
-                      </span>
+                      <span className="text-xs text-[var(--os-text-muted)]">Task completion</span>
+                      <span className="text-xs font-semibold text-[var(--os-text-secondary)]">{completionRate}%</span>
                     </div>
                     <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--os-surface-hover)]">
                       <div
@@ -345,6 +353,15 @@ function Team() {
             )
           })}
         </div>
+      )}
+
+      {workspace && (
+        <InviteMemberModal
+          open={inviteOpen}
+          workspaceId={workspace.id}
+          workspaceName={workspace.name}
+          onClose={() => setInviteOpen(false)}
+        />
       )}
     </div>
   )
