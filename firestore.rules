@@ -2,101 +2,39 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // --------------------------------------------------
-    // SHARED ACCESS HELPERS
-    // --------------------------------------------------
-
-    function signedIn() {
-      return request.auth != null;
-    }
-
-    function memberPath(workspaceId, userId) {
-      return /databases/$(database)/documents/workspaces/$(workspaceId)/members/$(userId);
-    }
-
-    function hasActiveMembership(workspaceId) {
-      return signedIn()
-        && exists(memberPath(workspaceId, request.auth.uid))
-        && get(memberPath(workspaceId, request.auth.uid)).data.status == 'active';
-    }
-
-    function hasRole(workspaceId, role) {
-      return hasActiveMembership(workspaceId)
-        && get(memberPath(workspaceId, request.auth.uid)).data.role == role;
-    }
-
-    function isOwner(workspaceId) {
-      return hasRole(workspaceId, 'owner');
-    }
-
-    function isAdmin(workspaceId) {
-      return hasRole(workspaceId, 'admin');
-    }
-
-    function isManager(workspaceId) {
-      return hasRole(workspaceId, 'manager');
-    }
-
-    function canApproveMembers(workspaceId) {
-      return isOwner(workspaceId) || isAdmin(workspaceId) || isManager(workspaceId);
-    }
-
-    function canManage(workspaceId) {
-      return isOwner(workspaceId) || isAdmin(workspaceId);
-    }
-
-    function canOperate(workspaceId) {
-      return isOwner(workspaceId) || isAdmin(workspaceId) || isManager(workspaceId);
-    }
-
-    // --------------------------------------------------
-    // USERS
-    // --------------------------------------------------
+    function signedIn() { return request.auth != null; }
+    function memberPath(workspaceId, userId) { return /databases/$(database)/documents/workspaces/$(workspaceId)/members/$(userId); }
+    function hasActiveMembership(workspaceId) { return signedIn() && exists(memberPath(workspaceId, request.auth.uid)) && get(memberPath(workspaceId, request.auth.uid)).data.status == 'active'; }
+    function hasRole(workspaceId, role) { return hasActiveMembership(workspaceId) && get(memberPath(workspaceId, request.auth.uid)).data.role == role; }
+    function isOwner(workspaceId) { return hasRole(workspaceId, 'owner'); }
+    function isAdmin(workspaceId) { return hasRole(workspaceId, 'admin'); }
+    function isManager(workspaceId) { return hasRole(workspaceId, 'manager'); }
+    function canApproveMembers(workspaceId) { return isOwner(workspaceId) || isAdmin(workspaceId) || isManager(workspaceId); }
+    function canManage(workspaceId) { return isOwner(workspaceId) || isAdmin(workspaceId); }
+    function canOperate(workspaceId) { return isOwner(workspaceId) || isAdmin(workspaceId) || isManager(workspaceId); }
 
     match /users/{userId} {
-      // Users can read profiles so task/project/member assignment can
-      // display real names. A user may only create/update their own profile.
       allow read: if signedIn();
       allow create, update: if signedIn() && request.auth.uid == userId;
       allow delete: if false;
     }
 
-    // --------------------------------------------------
-    // WORKSPACES
-    // --------------------------------------------------
-
     match /workspaces/{workspaceId} {
-      // A registered user may look up a workspace by ID during onboarding.
-      // Operational data remains protected by membership checks below.
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
       allow update: if canManage(workspaceId);
       allow delete: if false;
 
-      // ------------------------------------------------
-      // WORKSPACE MEMBERS
-      // ------------------------------------------------
-
       match /members/{memberId} {
-        // A new authenticated account may create ONLY its own pending
-        // membership request. It cannot create an active/admin membership.
         allow create: if signedIn()
           && request.auth.uid == memberId
           && request.resource.data.userId == request.auth.uid
           && request.resource.data.workspaceId == workspaceId
           && request.resource.data.status == 'pending';
 
-        // A user may read its own request. Approved managers/admins/owners
-        // may read members so they can manage workspace access.
         allow read: if signedIn()
-          && (
-            request.auth.uid == memberId
-            || canApproveMembers(workspaceId)
-          );
+          && (request.auth.uid == memberId || canApproveMembers(workspaceId));
 
-        // Only owner/admin/manager can approve, reject, suspend or change
-        // a member's role. A member cannot approve itself.
         allow update: if canApproveMembers(workspaceId)
           && memberId != request.auth.uid;
 
@@ -104,45 +42,27 @@ service cloud.firestore {
       }
     }
 
-    // --------------------------------------------------
-    // WEBSITES / APPS
-    // --------------------------------------------------
-
     match /websites/{websiteId} {
       allow create: if signedIn()
         && request.resource.data.workspaceId is string
         && request.resource.data.workspaceId != ''
         && canOperate(request.resource.data.workspaceId);
-
       allow read: if hasActiveMembership(resource.data.workspaceId);
-
       allow update: if canOperate(resource.data.workspaceId)
         && resource.data.workspaceId == request.resource.data.workspaceId;
-
       allow delete: if canManage(resource.data.workspaceId);
     }
-
-    // --------------------------------------------------
-    // CLIENTS
-    // --------------------------------------------------
 
     match /clients/{clientId} {
       allow create: if signedIn()
         && request.resource.data.workspaceId is string
         && request.resource.data.workspaceId != ''
         && canOperate(request.resource.data.workspaceId);
-
       allow read: if hasActiveMembership(resource.data.workspaceId);
-
       allow update: if canOperate(resource.data.workspaceId)
         && resource.data.workspaceId == request.resource.data.workspaceId;
-
       allow delete: if canManage(resource.data.workspaceId);
     }
-
-    // --------------------------------------------------
-    // PROJECTS
-    // --------------------------------------------------
 
     match /projects/{projectId} {
       allow create: if signedIn()
@@ -150,10 +70,13 @@ service cloud.firestore {
         && request.resource.data.workspaceId != ''
         && canOperate(request.resource.data.workspaceId);
 
-      allow read: if hasActiveMembership(resource.data.workspaceId);
+      // Interns only receive projects explicitly assigned to them through ownerId.
+      allow read: if hasActiveMembership(resource.data.workspaceId)
+        && (
+          get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role != 'intern'
+          || resource.data.ownerId == request.auth.uid
+        );
 
-      // Interns/members may update only a project assigned to them through
-      // ownerId. Managers/admins/owners can operate on workspace projects.
       allow update: if resource.data.workspaceId == request.resource.data.workspaceId
         && (
           canOperate(resource.data.workspaceId)
@@ -168,10 +91,6 @@ service cloud.firestore {
       allow delete: if canManage(resource.data.workspaceId);
     }
 
-    // --------------------------------------------------
-    // TASKS
-    // --------------------------------------------------
-
     match /tasks/{taskId} {
       allow create: if signedIn()
         && request.resource.data.workspaceId is string
@@ -179,16 +98,12 @@ service cloud.firestore {
         && request.resource.data.createdBy == request.auth.uid
         && canOperate(request.resource.data.workspaceId);
 
-      // Interns can read only their assigned tasks. Other active roles can
-      // read all workspace tasks according to their role.
       allow read: if hasActiveMembership(resource.data.workspaceId)
         && (
           get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role != 'intern'
           || resource.data.assigneeId == request.auth.uid
         );
 
-      // Managers/admins/owners can update all tasks. Members and interns can
-      // update only tasks assigned to themselves.
       allow update: if resource.data.workspaceId == request.resource.data.workspaceId
         && (
           canOperate(resource.data.workspaceId)
@@ -202,10 +117,6 @@ service cloud.firestore {
 
       allow delete: if canOperate(resource.data.workspaceId);
     }
-
-    // --------------------------------------------------
-    // DEFAULT DENY
-    // --------------------------------------------------
 
     match /{document=**} {
       allow read, write: if false;
