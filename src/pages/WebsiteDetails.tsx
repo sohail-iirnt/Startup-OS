@@ -5,17 +5,28 @@ import {
   CircleDollarSign,
   ExternalLink,
   Globe,
+  Pencil,
   Server,
+  Trash2,
   UserRound,
   Wrench,
 } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 
+import WebsiteModal from '../components/websites/WebsiteModal'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import { useWorkspace } from '../context/useWorkspace'
-import { getWebsite } from '../services/websiteService'
-import type { Website, WebsiteStatus } from '../types/website'
+import {
+  deleteWebsite,
+  getWebsite,
+  updateWebsite,
+} from '../services/websiteService'
+import type {
+  CreateWebsiteInput,
+  Website,
+  WebsiteStatus,
+} from '../types/website'
 
 const statusLabels: Record<WebsiteStatus, string> = {
   live: 'Live',
@@ -69,7 +80,7 @@ function DetailItem({
         <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--os-text-muted)]">
           {label}
         </p>
-        <p className="mt-1 break-words text-sm font-medium text-[var(--os-text)]">
+        <p className="mt-1 break-words text-sm font-medium capitalize text-[var(--os-text)]">
           {value}
         </p>
       </div>
@@ -85,6 +96,10 @@ function WebsiteDetails() {
   const [website, setWebsite] = useState<Website | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [modalInstance, setModalInstance] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -142,11 +157,87 @@ function WebsiteDetails() {
     }
   }, [websiteId, workspace?.id, workspaceLoading])
 
+  function openEditModal() {
+    if (!website) {
+      return
+    }
+
+    setError('')
+    setModalInstance((current) => current + 1)
+    setModalOpen(true)
+  }
+
+  function closeEditModal() {
+    if (saving) {
+      return
+    }
+
+    setModalOpen(false)
+  }
+
+  async function handleSave(input: CreateWebsiteInput) {
+    if (!website || !workspace?.id) {
+      throw new Error('Workspace is not available.')
+    }
+
+    setSaving(true)
+    setError('')
+
+    try {
+      const updated = await updateWebsite(
+        website.id,
+        workspace.id,
+        input,
+      )
+
+      setWebsite(updated)
+      setModalOpen(false)
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : 'Failed to update the website.',
+      )
+      throw saveError
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!website || !workspace?.id || deleting) {
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Delete “${website.name}”? This action cannot be undone.`,
+    )
+
+    if (!confirmed) {
+      return
+    }
+
+    setDeleting(true)
+    setError('')
+
+    try {
+      await deleteWebsite(website.id, workspace.id)
+      navigate('/websites', { replace: true })
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : 'Failed to delete the website.',
+      )
+      setDeleting(false)
+    }
+  }
+
   if (loading || workspaceLoading) {
     return (
       <div className="mx-auto w-full max-w-[1400px] p-4 sm:p-6 lg:p-8">
         <Card className="p-6">
-          <div className="space-y-4 animate-pulse">
+          <div className="animate-pulse space-y-4">
             <div className="h-5 w-32 rounded bg-[var(--os-surface-hover)]" />
             <div className="h-10 w-2/3 rounded bg-[var(--os-surface-hover)]" />
             <div className="h-4 w-1/3 rounded bg-[var(--os-surface-hover)]" />
@@ -195,6 +286,15 @@ function WebsiteDetails() {
         Back to Websites & Apps
       </button>
 
+      {error && (
+        <div
+          role="alert"
+          className="mb-6 rounded-xl border border-[rgba(255,100,124,0.25)] bg-[rgba(255,100,124,0.08)] px-4 py-3 text-sm text-[var(--os-danger)]"
+        >
+          {error}
+        </div>
+      )}
+
       <section className="mb-6 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 items-start gap-4">
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[var(--os-accent-soft)] text-[var(--os-accent)]">
@@ -217,17 +317,37 @@ function WebsiteDetails() {
           </div>
         </div>
 
-        {website.liveUrl && (
-          <a
-            href={website.liveUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="os-focus-ring inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-4 text-sm font-medium text-[var(--os-text-secondary)] transition-colors hover:border-[var(--os-border-strong)] hover:text-[var(--os-text)]"
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={openEditModal}
+            disabled={deleting}
           >
-            Open Live Website
-            <ExternalLink size={15} />
-          </a>
-        )}
+            <Pencil size={15} />
+            Edit Project
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleDelete}
+            disabled={deleting || saving}
+          >
+            <Trash2 size={15} />
+            {deleting ? 'Deleting...' : 'Delete'}
+          </Button>
+          {website.liveUrl && (
+            <a
+              href={website.liveUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="os-focus-ring inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-4 text-sm font-medium text-[var(--os-text-secondary)] transition-colors hover:border-[var(--os-border-strong)] hover:text-[var(--os-text)]"
+            >
+              Open Live Website
+              <ExternalLink size={15} />
+            </a>
+          )}
+        </div>
       </section>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -256,24 +376,29 @@ function WebsiteDetails() {
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <Card className="p-5 lg:col-span-2">
           <div className="flex items-center gap-2">
-            <Wrench size={17} className="text-[var(--os-accent)]" />
+            <CircleDollarSign size={17} className="text-[var(--os-accent)]" />
             <h2 className="text-sm font-semibold text-[var(--os-text)]">
-              Maintenance
+              Financial Snapshot
             </h2>
           </div>
 
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div className="mt-5 grid gap-4 sm:grid-cols-3">
+            <DetailItem
+              icon={<CircleDollarSign size={17} />}
+              label="Development Value"
+              value={formatCurrency(website.developmentAmount)}
+            />
             <DetailItem
               icon={<Wrench size={17} />}
-              label="Maintenance Status"
+              label="Maintenance"
               value={website.maintenanceOpted ? 'Active' : 'Not opted'}
             />
             <DetailItem
               icon={<CircleDollarSign size={17} />}
-              label="Monthly Charge"
+              label="Monthly Revenue"
               value={
                 website.maintenanceOpted
-                  ? `${formatCurrency(website.monthlyMaintenanceCharge)} / month`
+                  ? formatCurrency(website.monthlyMaintenanceCharge)
                   : '—'
               }
             />
@@ -304,6 +429,55 @@ function WebsiteDetails() {
                 {formatDate(website.updatedAt)}
               </p>
             </div>
+          </div>
+        </Card>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Card className="p-5">
+          <div className="flex items-center gap-2">
+            <Wrench size={17} className="text-[var(--os-accent)]" />
+            <h2 className="text-sm font-semibold text-[var(--os-text)]">
+              Maintenance
+            </h2>
+          </div>
+
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <DetailItem
+              icon={<Wrench size={17} />}
+              label="Maintenance Status"
+              value={website.maintenanceOpted ? 'Active' : 'Not opted'}
+            />
+            <DetailItem
+              icon={<CircleDollarSign size={17} />}
+              label="Monthly Charge"
+              value={
+                website.maintenanceOpted
+                  ? `${formatCurrency(website.monthlyMaintenanceCharge)} / month`
+                  : '—'
+              }
+            />
+          </div>
+        </Card>
+
+        <Card className="p-5">
+          <div className="flex items-center gap-2">
+            <Server size={17} className="text-[var(--os-accent)]" />
+            <h2 className="text-sm font-semibold text-[var(--os-text)]">
+              Hosting & Deployment
+            </h2>
+          </div>
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <DetailItem
+              icon={<Server size={17} />}
+              label="Hosting Provider"
+              value={website.hostingProvider || 'Not specified'}
+            />
+            <DetailItem
+              icon={<ExternalLink size={17} />}
+              label="Live URL"
+              value={website.liveUrl || 'Not specified'}
+            />
           </div>
         </Card>
       </div>
@@ -340,6 +514,15 @@ function WebsiteDetails() {
           {website.notes || 'No notes added for this website or app.'}
         </p>
       </Card>
+
+      <WebsiteModal
+        key={`website-details-modal-${modalInstance}`}
+        website={website}
+        open={modalOpen}
+        saving={saving}
+        onClose={closeEditModal}
+        onSubmit={handleSave}
+      />
     </div>
   )
 }
