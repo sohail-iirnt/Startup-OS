@@ -12,51 +12,57 @@ import {
 } from './WorkspaceContext'
 
 import {
-  initializeDefaultWorkspace,
   getWorkspace,
+  getWorkspaceMember,
+  initializeDefaultWorkspace,
 } from '../services/workspaceService'
+import { roleHasPermission } from '../types/permissions'
+import type { WorkspaceMember } from '../types/workspace'
 
 type WorkspaceProviderProps = {
   children: ReactNode
 }
 
-export function WorkspaceProvider({
-  children,
-}: WorkspaceProviderProps) {
-  const {
-    user,
-    loading: authLoading,
-  } = useAuth()
+export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
+  const { user, loading: authLoading } = useAuth()
 
   const [workspace, setWorkspace] =
-    useState<WorkspaceContextValue['workspace']>(
-      null,
+    useState<WorkspaceContextValue['workspace']>(null)
+  const [member, setMember] =
+    useState<WorkspaceMember | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const loadWorkspace = useCallback(async () => {
+    if (!user) {
+      return { workspace: null, member: null }
+    }
+
+    const userWorkspace = await initializeDefaultWorkspace(
+      user.uid,
+      user,
     )
 
-  const [loading, setLoading] =
-    useState(true)
+    if (!userWorkspace) {
+      return { workspace: null, member: null }
+    }
 
-  const loadWorkspace =
-    useCallback(async () => {
-      if (!user) {
-        return null
+    const [latestWorkspace, workspaceMember] = await Promise.all([
+      getWorkspace(userWorkspace.id),
+      getWorkspaceMember(userWorkspace.id, user.uid),
+    ])
+
+    if (!workspaceMember || workspaceMember.status !== 'active') {
+      return {
+        workspace: latestWorkspace ?? userWorkspace,
+        member: workspaceMember,
       }
+    }
 
-      const userWorkspace =
-        await initializeDefaultWorkspace(
-          user.uid,
-        )
-
-      const latestWorkspace =
-        await getWorkspace(
-          userWorkspace.id,
-        )
-
-      return (
-        latestWorkspace ??
-        userWorkspace
-      )
-    }, [user])
+    return {
+      workspace: latestWorkspace ?? userWorkspace,
+      member: workspaceMember,
+    }
+  }, [user])
 
   useEffect(() => {
     let cancelled = false
@@ -69,29 +75,24 @@ export function WorkspaceProvider({
       if (!user) {
         if (!cancelled) {
           setWorkspace(null)
+          setMember(null)
           setLoading(false)
         }
-
         return
       }
 
       try {
-        const loadedWorkspace =
-          await loadWorkspace()
+        const loaded = await loadWorkspace()
 
         if (!cancelled) {
-          setWorkspace(
-            loadedWorkspace,
-          )
+          setWorkspace(loaded.workspace)
+          setMember(loaded.member)
         }
       } catch (error) {
-        console.error(
-          'Failed to load workspace:',
-          error,
-        )
-
+        console.error('Failed to load workspace:', error)
         if (!cancelled) {
           setWorkspace(null)
+          setMember(null)
         }
       } finally {
         if (!cancelled) {
@@ -105,49 +106,52 @@ export function WorkspaceProvider({
     return () => {
       cancelled = true
     }
-  }, [
-    authLoading,
-    user,
-    loadWorkspace,
-  ])
+  }, [authLoading, user, loadWorkspace])
 
-  const refreshWorkspace =
-    useCallback(async () => {
-      if (!user) {
-        setWorkspace(null)
-        return
+  const refreshWorkspace = useCallback(async () => {
+    if (!user) {
+      setWorkspace(null)
+      setMember(null)
+      return
+    }
+
+    try {
+      setLoading(true)
+      const loaded = await loadWorkspace()
+      setWorkspace(loaded.workspace)
+      setMember(loaded.member)
+    } catch (error) {
+      console.error('Failed to refresh workspace:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [user, loadWorkspace])
+
+  const hasWorkspaceAccess =
+    Boolean(workspace && member?.status === 'active')
+
+  const hasPermission = useCallback(
+    (permission: Parameters<typeof roleHasPermission>[1]) => {
+      if (!member || member.status !== 'active') {
+        return false
       }
 
-      try {
-        setLoading(true)
-
-        const loadedWorkspace =
-          await loadWorkspace()
-
-        setWorkspace(
-          loadedWorkspace,
-        )
-      } catch (error) {
-        console.error(
-          'Failed to refresh workspace:',
-          error,
-        )
-      } finally {
-        setLoading(false)
-      }
-    }, [user, loadWorkspace])
+      return roleHasPermission(member.role, permission)
+    },
+    [member],
+  )
 
   const value: WorkspaceContextValue = {
     workspace,
-    loading:
-      authLoading || loading,
+    member,
+    loading: authLoading || loading,
+    hasWorkspaceAccess,
+    hasPermission,
     refreshWorkspace,
   }
 
   return (
-    <WorkspaceContext.Provider
-      value={value}
-    >
+    <WorkspaceContext.Provider value={value}>
       {children}
     </WorkspaceContext.Provider>
   )
