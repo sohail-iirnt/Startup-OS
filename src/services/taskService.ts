@@ -17,10 +17,19 @@ import type { CreateTaskInput, Task } from '../types/task'
 
 const TASKS_COLLECTION = 'tasks'
 
+function toDate(value: unknown): Date | null {
+  if (value instanceof Date) return value
+  if (value && typeof value === 'object' && 'toDate' in value && typeof value.toDate === 'function') {
+    return value.toDate() as Date
+  }
+  return null
+}
+
 function mapTask(id: string, data: Record<string, unknown>): Task {
   return {
     id,
     workspaceId: String(data.workspaceId ?? ''),
+    createdBy: String(data.createdBy ?? ''),
     title: String(data.title ?? ''),
     projectId: (data.projectId as string | null | undefined) ?? null,
     clientId: (data.clientId as string | null | undefined) ?? null,
@@ -28,11 +37,11 @@ function mapTask(id: string, data: Record<string, unknown>): Task {
     status: (data.status as Task['status']) ?? 'todo',
     priority: (data.priority as Task['priority']) ?? 'medium',
     description: String(data.description ?? ''),
-    dueDate: data.dueDate instanceof Date ? data.dueDate : null,
-    completedAt: data.completedAt instanceof Date ? data.completedAt : null,
-    deletedAt: data.deletedAt instanceof Date ? data.deletedAt : null,
-    createdAt: data.createdAt as Task['createdAt'],
-    updatedAt: data.updatedAt as Task['updatedAt'],
+    dueDate: toDate(data.dueDate),
+    completedAt: toDate(data.completedAt),
+    deletedAt: toDate(data.deletedAt),
+    createdAt: toDate(data.createdAt) ?? new Date(),
+    updatedAt: toDate(data.updatedAt) ?? new Date(),
   }
 }
 
@@ -53,12 +62,13 @@ export async function getTask(taskId: string): Promise<Task | null> {
   return mapTask(snapshot.id, snapshot.data() as Record<string, unknown>)
 }
 
-export async function createTask(workspaceId: string, input: CreateTaskInput): Promise<Task> {
+export async function createTask(workspaceId: string, createdBy: string, input: CreateTaskInput): Promise<Task> {
   const title = input.title.trim()
   if (!title) throw new Error('Task title is required.')
 
   const ref = await addDoc(collection(db, TASKS_COLLECTION), {
     workspaceId,
+    createdBy,
     title,
     projectId: input.projectId ?? null,
     clientId: input.clientId ?? null,
@@ -66,7 +76,7 @@ export async function createTask(workspaceId: string, input: CreateTaskInput): P
     status: input.status,
     priority: input.priority,
     description: input.description.trim(),
-    dueDate: input.dueDate || null,
+    dueDate: input.dueDate ?? null,
     completedAt: input.status === 'completed' ? serverTimestamp() : null,
     deletedAt: null,
     createdAt: serverTimestamp(),
@@ -95,7 +105,7 @@ export async function updateTask(taskId: string, workspaceId: string, input: Cre
     status: input.status,
     priority: input.priority,
     description: input.description.trim(),
-    dueDate: input.dueDate || null,
+    dueDate: input.dueDate ?? null,
     completedAt: input.status === 'completed' ? serverTimestamp() : null,
     updatedAt: serverTimestamp(),
   })
