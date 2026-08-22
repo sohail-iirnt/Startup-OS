@@ -72,6 +72,7 @@ async function initializeUserData(
 
     await initializeDefaultWorkspace(
       firebaseUser.uid,
+      firebaseUser,
     )
   } catch (error) {
     console.error(
