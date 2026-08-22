@@ -11,6 +11,8 @@ import Websites from '../pages/Websites'
 import WebsiteDetails from '../pages/WebsiteDetails'
 import Clients from '../pages/Clients'
 import ClientDetails from '../pages/ClientDetails'
+import Projects from '../pages/Projects'
+import ProjectDetails from '../pages/ProjectDetails'
 import WorkspaceSettings from '../pages/WorkspaceSettings'
 
 function AppRoutes() {
@@ -19,18 +21,15 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
-
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
           <Route path="/" element={<Dashboard />} />
-
           <Route path="/clients" element={<Clients />} />
           <Route path="/clients/:clientId" element={<ClientDetails />} />
-          <Route path="/projects" element={<PlaceholderPage title="Projects" description="Track projects, milestones, progress, ownership, deadlines, and delivery." />} />
-
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/projects/:projectId" element={<ProjectDetails />} />
           <Route path="/websites" element={<Websites />} />
           <Route path="/websites/:websiteId" element={<WebsiteDetails />} />
-
           <Route path="/tasks" element={<PlaceholderPage title="Tasks" description="Manage priorities, assignments, deadlines, recurring work, and execution." />} />
           <Route path="/calendar" element={<PlaceholderPage title="Calendar" description="Centralize meetings, deadlines, events, and important business dates." />} />
           <Route path="/finance" element={<PlaceholderPage title="Finance" description="Track revenue, expenses, transactions, financial health, and reporting." />} />
@@ -44,5 +43,4 @@ function AppRoutes() {
     </Routes>
   )
 }
-
 export default AppRoutes

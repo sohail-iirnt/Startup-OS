@@ -1,37 +1,35 @@
-import type {
-  BaseEntity,
-  ID,
-} from './common'
+import type { BaseEntity } from './common'
 
-export type ProjectStatus =
-  | 'planning'
-  | 'active'
-  | 'on_hold'
-  | 'completed'
-  | 'cancelled'
-
-export type ProjectPriority =
-  | 'low'
-  | 'medium'
-  | 'high'
-  | 'urgent'
+export type ProjectType = 'website' | 'web-app' | 'mobile-app' | 'branding' | 'software' | 'other'
+export type ProjectStatus = 'planning' | 'in-development' | 'on-hold' | 'testing' | 'completed' | 'cancelled'
+export type ProjectPriority = 'low' | 'medium' | 'high' | 'urgent'
 
 export type Project = BaseEntity & {
-  clientId?: ID | null
-
   name: string
-  description?: string
-
+  clientId: string
+  clientName: string
+  type: ProjectType
   status: ProjectStatus
   priority: ProjectPriority
+  startDate: Date | null
+  deadline: Date | null
+  description: string
+  budget: number
+  projectValue: number
+  notes: string
+}
 
-  startDate?: Date | null
-  dueDate?: Date | null
-
-  budget?: number | null
-  currency: string
-
-  progress: number
-
-  deletedAt?: Date | null
+export type CreateProjectInput = {
+  name: string
+  clientId: string
+  clientName: string
+  type: ProjectType
+  status: ProjectStatus
+  priority: ProjectPriority
+  startDate: string
+  deadline: string
+  description: string
+  budget: number
+  projectValue: number
+  notes: string
 }
