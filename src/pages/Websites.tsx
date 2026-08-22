@@ -82,8 +82,8 @@ function Websites() {
     useState(false)
   const [editingWebsite, setEditingWebsite] =
     useState<Website | null>(null)
-  const [modalKey, setModalKey] =
-    useState('website-modal-new')
+  const [modalInstance, setModalInstance] =
+	useState(0))
 
   useEffect(() => {
     let cancelled = false
@@ -132,29 +132,25 @@ function Websites() {
   }, [workspace?.id])
 
   function openCreateModal() {
-    if (!workspace?.id) {
-      setError(
-        'Please wait for the workspace to finish loading.',
-      )
-      return
-    }
-
-    setError('')
-    setEditingWebsite(null)
-    setModalKey(
-      `website-modal-new-${Date.now()}`,
+  if (!workspace?.id) {
+    setError(
+      'Please wait for the workspace to finish loading.',
     )
-    setModalOpen(true)
+    return
   }
+
+  setError('')
+  setEditingWebsite(null)
+  setModalInstance((current) => current + 1)
+  setModalOpen(true)
+}
 
   function openEditModal(website: Website) {
-    setError('')
-    setEditingWebsite(website)
-    setModalKey(
-      `website-modal-edit-${website.id}-${Date.now()}`,
-    )
-    setModalOpen(true)
-  }
+  setError('')
+  setEditingWebsite(website)
+  setModalInstance((current) => current + 1)
+  setModalOpen(true)
+}
 
   function closeModal() {
     if (saving) {
@@ -681,7 +677,7 @@ function Websites() {
        * instead of synchronously resetting state inside an effect.
        */}
       <WebsiteModal
-        key={modalKey}
+		key={`website-modal-${modalInstance}`}
         open={modalOpen}
         website={editingWebsite}
         saving={saving}
