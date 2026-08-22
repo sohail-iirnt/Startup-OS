@@ -13,30 +13,20 @@ import {
 import type { User } from 'firebase/auth'
 
 import { db } from '../lib/firebase'
-import type {
-  Workspace,
-  WorkspaceMember,
-} from '../types/workspace'
+import type { Workspace, WorkspaceMember } from '../types/workspace'
 import type { UserRole } from '../types/common'
-import {
-  getUserProfile,
-  setDefaultWorkspace,
-} from './userService'
+import { getUserProfile, setDefaultWorkspace } from './userService'
 
 const WORKSPACES_COLLECTION = 'workspaces'
 const MEMBERS_COLLECTION = 'members'
 const DEFAULT_WORKSPACE_NAME = 'WebAura By III'
 
-export async function createWorkspace(
-  userId: string,
-  name: string,
-  description = '',
-): Promise<Workspace> {
+export async function createWorkspace(userId: string, name: string, description = ''): Promise<Workspace> {
   const workspacesRef = collection(db, WORKSPACES_COLLECTION)
   const workspaceRef = doc(workspacesRef)
   const workspaceId = workspaceRef.id
 
-  const workspaceData = {
+  await setDoc(workspaceRef, {
     id: workspaceId,
     name: name.trim(),
     description: description.trim(),
@@ -44,56 +34,25 @@ export async function createWorkspace(
     workspaceCode: workspaceId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  }
+  })
 
-  await setDoc(workspaceRef, workspaceData)
   await setWorkspaceMember(workspaceId, userId, 'owner')
-
   const createdSnapshot = await getDoc(workspaceRef)
-
-  return {
-    id: createdSnapshot.id,
-    ...createdSnapshot.data(),
-  } as Workspace
+  return { id: createdSnapshot.id, ...createdSnapshot.data() } as Workspace
 }
 
-export async function getWorkspace(
-  workspaceId: string,
-): Promise<Workspace | null> {
+export async function getWorkspace(workspaceId: string): Promise<Workspace | null> {
   const workspaceRef = doc(db, WORKSPACES_COLLECTION, workspaceId)
   const snapshot = await getDoc(workspaceRef)
-
-  if (!snapshot.exists()) {
-    return null
-  }
-
-  return {
-    id: snapshot.id,
-    ...snapshot.data(),
-  } as Workspace
+  if (!snapshot.exists()) return null
+  return { id: snapshot.id, ...snapshot.data() } as Workspace
 }
 
-export async function getWorkspaceMember(
-  workspaceId: string,
-  userId: string,
-): Promise<WorkspaceMember | null> {
-  const memberRef = doc(
-    db,
-    WORKSPACES_COLLECTION,
-    workspaceId,
-    MEMBERS_COLLECTION,
-    userId,
-  )
+export async function getWorkspaceMember(workspaceId: string, userId: string): Promise<WorkspaceMember | null> {
+  const memberRef = doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId)
   const snapshot = await getDoc(memberRef)
-
-  if (!snapshot.exists()) {
-    return null
-  }
-
-  return {
-    id: snapshot.id,
-    ...snapshot.data(),
-  } as WorkspaceMember
+  if (!snapshot.exists()) return null
+  return { id: snapshot.id, ...snapshot.data() } as WorkspaceMember
 }
 
 export async function setWorkspaceMember(
@@ -103,19 +62,9 @@ export async function setWorkspaceMember(
   user?: User,
   status: WorkspaceMember['status'] = 'active',
 ): Promise<void> {
-  const memberRef = doc(
-    db,
-    WORKSPACES_COLLECTION,
-    workspaceId,
-    MEMBERS_COLLECTION,
-    userId,
-  )
-
+  const memberRef = doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId)
   const existingSnapshot = await getDoc(memberRef)
-
-  if (existingSnapshot.exists()) {
-    return
-  }
+  if (existingSnapshot.exists()) return
 
   await setDoc(memberRef, {
     id: userId,
@@ -123,10 +72,7 @@ export async function setWorkspaceMember(
     userId,
     role,
     status,
-    displayName:
-      user?.displayName ||
-      user?.email?.split('@')[0] ||
-      'Workspace Member',
+    displayName: user?.displayName || user?.email?.split('@')[0] || 'Workspace Member',
     email: user?.email || '',
     photoURL: user?.photoURL || null,
     designation: role === 'owner' ? 'Founder' : role,
@@ -136,115 +82,77 @@ export async function setWorkspaceMember(
 }
 
 async function findDefaultWorkspace(): Promise<Workspace | null> {
-  const workspacesRef = collection(db, WORKSPACES_COLLECTION)
-  const workspaceQuery = query(
-    workspacesRef,
+  const snapshot = await getDocs(query(
+    collection(db, WORKSPACES_COLLECTION),
     where('name', '==', DEFAULT_WORKSPACE_NAME),
     limit(1),
-  )
-  const snapshot = await getDocs(workspaceQuery)
-
-  if (snapshot.empty) {
-    return null
-  }
-
-  const workspaceSnapshot = snapshot.docs[0]
-  return {
-    id: workspaceSnapshot.id,
-    ...workspaceSnapshot.data(),
-  } as Workspace
+  ))
+  if (snapshot.empty) return null
+  const item = snapshot.docs[0]
+  return { id: item.id, ...item.data() } as Workspace
 }
 
-/**
- * Loads a user's already-approved/default workspace.
- * New registrations must use requestWorkspaceMembership()
- * instead of silently joining the default workspace.
- */
-export async function initializeDefaultWorkspace(
-  userId: string,
-  user?: User,
-): Promise<Workspace | null> {
+export async function initializeDefaultWorkspace(userId: string, user?: User): Promise<Workspace | null> {
   const userProfile = await getUserProfile(userId)
 
   if (userProfile?.defaultWorkspaceId) {
-    const existingWorkspace = await getWorkspace(
-      userProfile.defaultWorkspaceId,
-    )
-
+    const existingWorkspace = await getWorkspace(userProfile.defaultWorkspaceId)
     if (existingWorkspace) {
-      const existingMember = await getWorkspaceMember(
-        existingWorkspace.id,
-        userId,
-      )
-
-      if (!existingMember || existingMember.status !== 'active') {
-        if (!existingMember) {
-          await setWorkspaceMember(
-            existingWorkspace.id,
-            userId,
-            existingWorkspace.ownerId === userId ? 'owner' : 'member',
-            user,
-            'active',
-          )
-        }
+      const existingMember = await getWorkspaceMember(existingWorkspace.id, userId)
+      if (!existingMember) {
+        await setWorkspaceMember(
+          existingWorkspace.id,
+          userId,
+          existingWorkspace.ownerId === userId ? 'owner' : 'member',
+          user,
+          'active',
+        )
       }
-
       return existingWorkspace
     }
+  }
+
+  // Legacy fallback: only used for an account that already belongs to no
+  // workspace. New registrations never call this to join automatically.
+  const sharedWorkspace = await findDefaultWorkspace()
+  if (sharedWorkspace && userProfile?.defaultWorkspaceId) {
+    await setWorkspaceMember(
+      sharedWorkspace.id,
+      userId,
+      sharedWorkspace.ownerId === userId ? 'owner' : 'member',
+      user,
+      'active',
+    )
+    await setDefaultWorkspace(userId, sharedWorkspace.id)
+    return sharedWorkspace
   }
 
   return null
 }
 
-/**
- * Creates a pending membership request for a specific workspace.
- * The workspace owner/admin/manager must approve it before the
- * user receives an active workspace session.
- */
 export async function requestWorkspaceMembership(
   workspaceId: string,
   user: User,
   requestedRole: UserRole = 'member',
 ): Promise<WorkspaceMember> {
   const normalizedWorkspaceId = workspaceId.trim()
-
-  if (!normalizedWorkspaceId) {
-    throw new Error('Please enter a valid Workspace ID.')
-  }
+  if (!normalizedWorkspaceId) throw new Error('Please enter a valid Workspace ID.')
 
   const workspace = await getWorkspace(normalizedWorkspaceId)
+  if (!workspace) throw new Error('Workspace ID was not found. Please check it and try again.')
 
-  if (!workspace) {
-    throw new Error('Workspace ID was not found. Please check it and try again.')
-  }
-
-  const memberRef = doc(
-    db,
-    WORKSPACES_COLLECTION,
-    normalizedWorkspaceId,
-    MEMBERS_COLLECTION,
-    user.uid,
-  )
+  const memberRef = doc(db, WORKSPACES_COLLECTION, normalizedWorkspaceId, MEMBERS_COLLECTION, user.uid)
   const existingSnapshot = await getDoc(memberRef)
 
   if (existingSnapshot.exists()) {
-    const existing = {
-      id: existingSnapshot.id,
-      ...existingSnapshot.data(),
-    } as WorkspaceMember
-
+    const existing = { id: existingSnapshot.id, ...existingSnapshot.data() } as WorkspaceMember
     if (existing.status === 'active') {
       await setDefaultWorkspace(user.uid, normalizedWorkspaceId)
       return existing
     }
-
-    if (existing.status === 'pending' || existing.status === 'invited') {
-      return existing
-    }
-
-    if (existing.status === 'suspended') {
-      throw new Error('Your membership in this workspace is suspended.')
-    }
+    if (existing.status === 'pending' || existing.status === 'invited') return existing
+    if (existing.status === 'suspended') throw new Error('Your membership in this workspace is suspended.')
+    if (existing.status === 'rejected') throw new Error('Your previous request was rejected. Please contact a workspace administrator.')
   }
 
   await setDoc(memberRef, {
@@ -253,8 +161,7 @@ export async function requestWorkspaceMembership(
     userId: user.uid,
     role: requestedRole,
     status: 'pending',
-    displayName:
-      user.displayName || user.email?.split('@')[0] || 'Workspace Member',
+    displayName: user.displayName || user.email?.split('@')[0] || 'Workspace Member',
     email: user.email || '',
     photoURL: user.photoURL || null,
     designation: requestedRole,
@@ -263,11 +170,7 @@ export async function requestWorkspaceMembership(
   })
 
   const createdSnapshot = await getDoc(memberRef)
-
-  return {
-    id: createdSnapshot.id,
-    ...createdSnapshot.data(),
-  } as WorkspaceMember
+  return { id: createdSnapshot.id, ...createdSnapshot.data() } as WorkspaceMember
 }
 
 export async function approveWorkspaceMember(
@@ -275,14 +178,7 @@ export async function approveWorkspaceMember(
   userId: string,
   role: UserRole = 'member',
 ): Promise<void> {
-  const memberRef = doc(
-    db,
-    WORKSPACES_COLLECTION,
-    workspaceId,
-    MEMBERS_COLLECTION,
-    userId,
-  )
-
+  const memberRef = doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId)
   await updateDoc(memberRef, {
     role,
     status: 'active',
@@ -290,45 +186,19 @@ export async function approveWorkspaceMember(
     joinedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   })
+
+  // The member's next workspace refresh will now resolve this workspace.
+  // Store the default workspace only after approval, never while pending.
+  await setDefaultWorkspace(userId, workspaceId)
 }
 
-export async function rejectWorkspaceMember(
-  workspaceId: string,
-  userId: string,
-): Promise<void> {
-  const memberRef = doc(
-    db,
-    WORKSPACES_COLLECTION,
-    workspaceId,
-    MEMBERS_COLLECTION,
-    userId,
-  )
-
-  await updateDoc(memberRef, {
-    status: 'rejected',
-    updatedAt: serverTimestamp(),
-  })
+export async function rejectWorkspaceMember(workspaceId: string, userId: string): Promise<void> {
+  const memberRef = doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId)
+  await updateDoc(memberRef, { status: 'rejected', updatedAt: serverTimestamp() })
 }
 
-export async function getPendingWorkspaceMembers(
-  workspaceId: string,
-): Promise<WorkspaceMember[]> {
-  const membersRef = collection(
-    db,
-    WORKSPACES_COLLECTION,
-    workspaceId,
-    MEMBERS_COLLECTION,
-  )
-
-  const snapshot = await getDocs(
-    query(
-      membersRef,
-      where('status', '==', 'pending'),
-    ),
-  )
-
-  return snapshot.docs.map((item) => ({
-    id: item.id,
-    ...item.data(),
-  }) as WorkspaceMember)
+export async function getPendingWorkspaceMembers(workspaceId: string): Promise<WorkspaceMember[]> {
+  const membersRef = collection(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION)
+  const snapshot = await getDocs(query(membersRef, where('status', '==', 'pending')))
+  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as WorkspaceMember)
 }
