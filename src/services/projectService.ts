@@ -19,16 +19,53 @@ function dateValue(value: unknown): Date | null {
 }
 
 function mapProject(id: string, data: DocumentData): Project {
-  return { id, workspaceId: data.workspaceId ?? '', createdBy: data.createdBy ?? '', name: data.name ?? '', clientId: data.clientId ?? '', clientName: data.clientName ?? '', type: data.type ?? 'software', status: data.status ?? 'planning', priority: data.priority ?? 'medium', startDate: dateValue(data.startDate), deadline: dateValue(data.deadline), description: data.description ?? '', budget: Number(data.budget ?? 0), projectValue: Number(data.projectValue ?? 0), notes: data.notes ?? '', createdAt: dateValue(data.createdAt) ?? new Date(), updatedAt: dateValue(data.updatedAt) ?? new Date() }
+  return {
+    id,
+    workspaceId: data.workspaceId ?? '',
+    createdBy: data.createdBy ?? '',
+    name: data.name ?? '',
+    clientId: data.clientId ?? '',
+    clientName: data.clientName ?? '',
+    ownerId: data.ownerId ?? '',
+    ownerName: data.ownerName ?? '',
+    type: data.type ?? 'software',
+    status: data.status ?? 'planning',
+    priority: data.priority ?? 'medium',
+    startDate: dateValue(data.startDate),
+    deadline: dateValue(data.deadline),
+    description: data.description ?? '',
+    budget: Number(data.budget ?? 0),
+    projectValue: Number(data.projectValue ?? 0),
+    notes: data.notes ?? '',
+    createdAt: dateValue(data.createdAt) ?? new Date(),
+    updatedAt: dateValue(data.updatedAt) ?? new Date(),
+  }
 }
 
 function normalize(input: CreateProjectInput) {
   const budget = Number(input.budget)
   const projectValue = Number(input.projectValue)
+
   if (!input.name.trim()) throw new Error('Project name is required.')
   if (!input.clientId) throw new Error('Please select a client.')
-  if (!Number.isFinite(budget) || budget < 0 || !Number.isFinite(projectValue) || projectValue < 0) throw new Error('Budget and project value cannot be negative.')
-  return { ...input, name: input.name.trim(), clientId: input.clientId.trim(), clientName: input.clientName.trim(), description: input.description.trim(), notes: input.notes.trim(), budget, projectValue, startDate: input.startDate || null, deadline: input.deadline || null }
+  if (!Number.isFinite(budget) || budget < 0 || !Number.isFinite(projectValue) || projectValue < 0) {
+    throw new Error('Budget and project value cannot be negative.')
+  }
+
+  return {
+    ...input,
+    name: input.name.trim(),
+    clientId: input.clientId.trim(),
+    clientName: input.clientName.trim(),
+    ownerId: input.ownerId.trim(),
+    ownerName: input.ownerName.trim(),
+    description: input.description.trim(),
+    notes: input.notes.trim(),
+    budget,
+    projectValue,
+    startDate: input.startDate || null,
+    deadline: input.deadline || null,
+  }
 }
 
 export async function getProjects(workspaceId: string) {
@@ -49,7 +86,15 @@ export async function createProject(workspaceId: string, input: CreateProjectInp
   if (!workspaceId) throw new Error('Workspace is required to create a project.')
   const createdBy = userId()
   const normalized = normalize(input)
-  const reference = await addDoc(collection(db, COLLECTION), { workspaceId, createdBy, ...normalized, startDate: normalized.startDate ? new Date(normalized.startDate) : null, deadline: normalized.deadline ? new Date(normalized.deadline) : null, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
+  const reference = await addDoc(collection(db, COLLECTION), {
+    workspaceId,
+    createdBy,
+    ...normalized,
+    startDate: normalized.startDate ? new Date(normalized.startDate) : null,
+    deadline: normalized.deadline ? new Date(normalized.deadline) : null,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  })
   const created = await getDoc(reference)
   if (!created.exists()) throw new Error('Project was created but could not be loaded.')
   return mapProject(created.id, created.data())
@@ -63,7 +108,12 @@ export async function updateProject(projectId: string, workspaceId: string, inpu
   const existing = await getDoc(reference)
   if (!existing.exists()) throw new Error('Project could not be found.')
   if (existing.data().workspaceId !== workspaceId) throw new Error('This project does not belong to the active workspace.')
-  await updateDoc(reference, { ...normalized, startDate: normalized.startDate ? new Date(normalized.startDate) : null, deadline: normalized.deadline ? new Date(normalized.deadline) : null, updatedAt: serverTimestamp() })
+  await updateDoc(reference, {
+    ...normalized,
+    startDate: normalized.startDate ? new Date(normalized.startDate) : null,
+    deadline: normalized.deadline ? new Date(normalized.deadline) : null,
+    updatedAt: serverTimestamp(),
+  })
   const updated = await getDoc(reference)
   if (!updated.exists()) throw new Error('Project was updated but could not be loaded.')
   return mapProject(updated.id, updated.data())
