@@ -10,6 +10,7 @@ export type Workspace = {
   name: string
   description?: string
   ownerId: ID
+  workspaceCode?: string
 } & Omit<BaseEntity, 'workspaceId' | 'createdBy'>
 
 export type WorkspaceMember = {
