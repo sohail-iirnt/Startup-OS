@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { CheckCircle2, Palette, Save } from 'lucide-react'
 
 import Button from '../ui/Button'
@@ -7,28 +7,63 @@ import SectionHeader from '../ui/SectionHeader'
 import { useWorkspace } from '../../context/useWorkspace'
 import { updateWorkspaceBranding } from '../../services/workspaceService'
 
+const DEFAULT_PORTAL_NAME = 'Startup OS'
+const DEFAULT_PORTAL_SUBTITLE = 'Founder Command Center'
+
 function WorkspaceBrandingCard() {
   const { workspace, member } = useWorkspace()
-  const [portalName, setPortalName] = useState(workspace?.portalName?.trim() || 'Startup OS')
-  const [portalSubtitle, setPortalSubtitle] = useState(workspace?.portalSubtitle?.trim() || 'Founder Command Center')
+  const [portalName, setPortalName] = useState(DEFAULT_PORTAL_NAME)
+  const [portalSubtitle, setPortalSubtitle] = useState(DEFAULT_PORTAL_SUBTITLE)
+  const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
 
   const canManage = member?.role === 'owner' || member?.role === 'admin'
 
+  // Sync Firestore branding into the form only while the user is not editing.
+  // This prevents a live listener update from overwriting text the admin is typing.
+  useEffect(() => {
+    if (editing) return
+    setPortalName(workspace?.portalName?.trim() || DEFAULT_PORTAL_NAME)
+    setPortalSubtitle(workspace?.portalSubtitle?.trim() || DEFAULT_PORTAL_SUBTITLE)
+  }, [workspace?.portalName, workspace?.portalSubtitle, editing])
+
+  function changePortalName(value: string) {
+    setEditing(true)
+    setSaved(false)
+    setError('')
+    setPortalName(value)
+  }
+
+  function changePortalSubtitle(value: string) {
+    setEditing(true)
+    setSaved(false)
+    setError('')
+    setPortalSubtitle(value)
+  }
+
   async function handleSave() {
     if (!workspace?.id || !canManage || saving) return
+
     const nextName = portalName.trim()
     const nextSubtitle = portalSubtitle.trim()
-    if (!nextName) { setError('Portal name is required.'); return }
-    if (!nextSubtitle) { setError('Portal subtitle is required.'); return }
+    if (!nextName) {
+      setError('Portal name is required.')
+      return
+    }
+    if (!nextSubtitle) {
+      setError('Portal subtitle is required.')
+      return
+    }
 
     setSaving(true)
     setSaved(false)
     setError('')
+
     try {
       await updateWorkspaceBranding(workspace.id, nextName, nextSubtitle)
+      setEditing(false)
       setSaved(true)
       window.setTimeout(() => setSaved(false), 2200)
     } catch (saveError) {
@@ -52,7 +87,7 @@ function WorkspaceBrandingCard() {
           <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-[var(--os-text-secondary)]">Portal name</span>
           <input
             value={portalName}
-            onChange={(event) => { setPortalName(event.target.value); setSaved(false) }}
+            onChange={(event) => changePortalName(event.target.value)}
             maxLength={60}
             placeholder="e.g. Startup OS"
             className="os-focus-ring h-12 w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-4 text-sm text-[var(--os-text)] placeholder:text-[var(--os-text-muted)]"
@@ -64,7 +99,7 @@ function WorkspaceBrandingCard() {
           <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-[var(--os-text-secondary)]">Portal subtitle</span>
           <input
             value={portalSubtitle}
-            onChange={(event) => { setPortalSubtitle(event.target.value); setSaved(false) }}
+            onChange={(event) => changePortalSubtitle(event.target.value)}
             maxLength={80}
             placeholder="e.g. Founder Command Center"
             className="os-focus-ring h-12 w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-4 text-sm text-[var(--os-text)] placeholder:text-[var(--os-text-muted)]"
@@ -83,7 +118,7 @@ function WorkspaceBrandingCard() {
             <p className="mt-0.5 text-xs text-[var(--os-text-muted)]">All active members receive changes automatically.</p>
           </div>
         </div>
-        <Button type="button" onClick={() => void handleSave()} disabled={saving}>
+        <Button type="button" onClick={() => void handleSave()} disabled={saving || !workspace?.id}>
           {saved ? <CheckCircle2 size={16} /> : <Save size={16} />}
           {saving ? 'Saving...' : saved ? 'Saved' : 'Save branding'}
         </Button>
