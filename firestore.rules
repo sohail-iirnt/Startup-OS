@@ -15,13 +15,10 @@ service cloud.firestore {
     function canOperate(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin', 'manager']); }
     function canManageTasks(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin', 'manager']); }
     function canCreateTasks(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin', 'manager', 'member']); }
+    function canCreateProjects(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin', 'manager', 'member', 'intern']); }
     function canUpdateOwnTask(workspaceId, taskId) { return hasActiveMembership(workspaceId) && userRole(workspaceId) in ['member', 'intern'] && get(/databases/$(database)/documents/tasks/$(taskId)).data.assigneeId == request.auth.uid; }
-    function canUpdateOwnProject(workspaceId, projectId) { return hasActiveMembership(workspaceId) && userRole(workspaceId) == 'intern' && (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid || request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.memberIds); }
-    function canApproveMemberUpdate(workspaceId) {
-      return canApproveMembers(workspaceId)
-        && request.resource.data.role in (isOwner(workspaceId) || isAdmin(workspaceId) ? ['admin', 'manager', 'member', 'intern', 'viewer'] : ['member', 'intern', 'viewer'])
-        && request.resource.data.status == 'active';
-    }
+    function canUpdateOwnProject(workspaceId, projectId) { return hasActiveMembership(workspaceId) && userRole(workspaceId) == 'intern' && ((get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid) || (get(/databases/$(database)/documents/projects/$(projectId)).data.keys().hasAll(['memberIds']) && request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.memberIds)); }
+    function canApproveMemberUpdate(workspaceId) { return canApproveMembers(workspaceId) && request.resource.data.role in (isOwner(workspaceId) || isAdmin(workspaceId) ? ['admin', 'manager', 'member', 'intern', 'viewer'] : ['member', 'intern', 'viewer']) && request.resource.data.status == 'active'; }
 
     match /users/{userId} {
       allow read: if signedIn();
@@ -34,14 +31,12 @@ service cloud.firestore {
       allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
       allow update: if canManage(workspaceId);
       allow delete: if false;
-
       match /members/{memberId} {
         allow create: if signedIn() && request.auth.uid == memberId && request.resource.data.userId == request.auth.uid && request.resource.data.workspaceId == workspaceId && request.resource.data.status == 'pending';
         allow read: if signedIn() && (request.auth.uid == memberId || canApproveMembers(workspaceId));
         allow update: if memberId != request.auth.uid && request.resource.data.userId == resource.data.userId && request.resource.data.workspaceId == resource.data.workspaceId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'designation', 'status', 'updatedAt']) && (canManage(workspaceId) || (canApproveMemberUpdate(workspaceId) && resource.data.status == 'pending'));
         allow delete: if false;
       }
-
       match /invitations/{invitationId} {
         allow create: if canApproveMembers(workspaceId) && request.resource.data.workspaceId == workspaceId && request.resource.data.createdBy == request.auth.uid && request.resource.data.token == invitationId && request.resource.data.role in ['admin', 'manager', 'member', 'intern', 'viewer'] && request.resource.data.status == 'pending';
         allow get: if resource.data.workspaceId == workspaceId && resource.data.token == invitationId && resource.data.status == 'pending' && resource.data.expiresAt > request.time;
@@ -80,8 +75,8 @@ service cloud.firestore {
     }
 
     match /projects/{projectId} {
-      allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && canOperate(request.resource.data.workspaceId);
-      allow read: if hasAnyRole(resource.data.workspaceId, ['owner', 'admin', 'manager', 'member', 'viewer']) || (hasRole(resource.data.workspaceId, 'intern') && (resource.data.ownerId == request.auth.uid || request.auth.uid in resource.data.memberIds));
+      allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && canCreateProjects(request.resource.data.workspaceId) && (userRole(request.resource.data.workspaceId) != 'intern' || (request.resource.data.ownerId == request.auth.uid && request.resource.data.memberIds is list && request.auth.uid in request.resource.data.memberIds));
+      allow read: if hasAnyRole(resource.data.workspaceId, ['owner', 'admin', 'manager', 'member', 'viewer']) || (hasRole(resource.data.workspaceId, 'intern') && ((resource.data.ownerId == request.auth.uid) || (resource.data.keys().hasAll(['memberIds']) && request.auth.uid in resource.data.memberIds)));
       allow update: if resource.data.workspaceId == request.resource.data.workspaceId && (canOperate(resource.data.workspaceId) || canUpdateOwnProject(resource.data.workspaceId, projectId));
       allow delete: if canManage(resource.data.workspaceId);
     }
