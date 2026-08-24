@@ -6,6 +6,7 @@ import {
 
 import { useAuth } from '../context/useAuth'
 import { useWorkspace } from '../context/useWorkspace'
+import { normalizeUserRole } from '../types/permissions'
 import type { WorkspacePermission } from '../types/permissions'
 
 type ProtectedRouteProps = {
@@ -64,7 +65,13 @@ function ProtectedRoute({
     return <Navigate to="/pending-approval" replace />
   }
 
-  if (requiredPermission && !hasPermission(requiredPermission)) {
+  // Owner/admin are workspace administrators. Their administrator baseline
+  // must never be blocked by a stale/mismatched page-level permission check.
+  // Data-level access is still enforced by Firestore rules.
+  const role = normalizeUserRole(member?.role)
+  const isWorkspaceAdmin = role === 'owner' || role === 'admin'
+
+  if (requiredPermission && !isWorkspaceAdmin && !hasPermission(requiredPermission)) {
     return <Navigate to="/" replace />
   }
 
