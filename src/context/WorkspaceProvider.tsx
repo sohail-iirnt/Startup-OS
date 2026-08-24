@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useAuth } from './useAuth'
 import { WorkspaceContext, type WorkspaceContextValue } from './WorkspaceContext'
 import { getWorkspace, getWorkspaceMember, initializeDefaultWorkspace, subscribeToWorkspaceMember } from '../services/workspaceService'
-import { roleHasPermission } from '../types/permissions'
+import { memberHasPermission } from '../types/permissions'
 import type { WorkspaceMember } from '../types/workspace'
 
 type WorkspaceProviderProps = { children: ReactNode }
@@ -67,10 +67,7 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
   }, [user, loadWorkspace])
 
   const hasWorkspaceAccess = Boolean(workspace && member?.status === 'active')
-  const hasPermission = useCallback((permission: Parameters<typeof roleHasPermission>[1]) => {
-    if (!member || member.status !== 'active') return false
-    return roleHasPermission(member.role, permission)
-  }, [member])
+  const hasPermission = useCallback((permission: Parameters<typeof memberHasPermission>[1]) => memberHasPermission(member, permission), [member])
 
   const value: WorkspaceContextValue = { workspace, member, loading: authLoading || loading, hasWorkspaceAccess, hasPermission, refreshWorkspace }
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>
