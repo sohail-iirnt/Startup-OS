@@ -1,12 +1,13 @@
 import {
-  addDoc,
-  collection,
+  doc,
+  getDoc,
   getDocs,
+  collection,
   orderBy,
   query,
+  setDoc,
   Timestamp,
   updateDoc,
-  doc,
 } from 'firebase/firestore'
 
 import { auth, db } from '../lib/firebase'
@@ -18,12 +19,11 @@ const INVITATIONS_COLLECTION = 'invitations'
 const DEFAULT_EXPIRY_DAYS = 7
 
 function invitationCollection(workspaceId: string) {
-  return collection(
-    db,
-    WORKSPACES_COLLECTION,
-    workspaceId,
-    INVITATIONS_COLLECTION,
-  )
+  return collection(db, WORKSPACES_COLLECTION, workspaceId, INVITATIONS_COLLECTION)
+}
+
+function invitationDocument(workspaceId: string, token: string) {
+  return doc(db, WORKSPACES_COLLECTION, workspaceId, INVITATIONS_COLLECTION, token)
 }
 
 function createToken() {
@@ -51,8 +51,9 @@ export async function createWorkspaceInvitation(
 
   const token = createToken()
   const normalizedEmail = email?.trim().toLowerCase() || undefined
+  const reference = invitationDocument(workspaceId, token)
 
-  const reference = await addDoc(invitationCollection(workspaceId), {
+  await setDoc(reference, {
     workspaceId,
     email: normalizedEmail ?? null,
     role,
@@ -64,7 +65,7 @@ export async function createWorkspaceInvitation(
   })
 
   return {
-    id: reference.id,
+    id: token,
     workspaceId,
     ...(normalizedEmail ? { email: normalizedEmail } : {}),
     role,
@@ -112,21 +113,51 @@ export async function getWorkspaceInvitations(
   return snapshot.docs.map(toInvitation)
 }
 
+export async function getWorkspaceInvitationByToken(
+  workspaceId: string,
+  token: string,
+): Promise<WorkspaceInvitation | null> {
+  const normalizedToken = token.trim()
+  if (!workspaceId.trim() || !normalizedToken) return null
+
+  const snapshot = await getDoc(invitationDocument(workspaceId.trim(), normalizedToken))
+  if (!snapshot.exists()) return null
+
+  return toInvitation(snapshot)
+}
+
+export async function acceptWorkspaceInvitation(
+  workspaceId: string,
+  token: string,
+  userId: string,
+): Promise<void> {
+  const invitation = await getWorkspaceInvitationByToken(workspaceId, token)
+
+  if (!invitation) {
+    throw new Error('This invitation is no longer valid.')
+  }
+
+  if (invitation.status !== 'pending') {
+    throw new Error('This invitation has already been used or is no longer active.')
+  }
+
+  if (invitation.expiresAt.getTime() <= Date.now()) {
+    throw new Error('This invitation has expired. Please request a new invitation.')
+  }
+
+  await updateDoc(invitationDocument(workspaceId, token), {
+    status: 'accepted',
+    acceptedBy: userId,
+    acceptedAt: Timestamp.now(),
+  })
+}
+
 export async function revokeWorkspaceInvitation(
   workspaceId: string,
   invitationId: string,
 ): Promise<void> {
-  await updateDoc(
-    doc(
-      db,
-      WORKSPACES_COLLECTION,
-      workspaceId,
-      INVITATIONS_COLLECTION,
-      invitationId,
-    ),
-    {
-      status: 'revoked',
-      revokedAt: Timestamp.now(),
-    },
-  )
+  await updateDoc(invitationDocument(workspaceId, invitationId), {
+    status: 'revoked',
+    revokedAt: Timestamp.now(),
+  })
 }
