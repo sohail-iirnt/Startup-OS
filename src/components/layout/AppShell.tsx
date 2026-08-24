@@ -1,16 +1,21 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 
 import Sidebar from './Sidebar'
 import Topbar from './Topbar'
+import { useWorkspace } from '../../context/useWorkspace'
 
 function AppShell() {
   const [mobileOpen, setMobileOpen] =
     useState(false)
+  const { workspace } = useWorkspace()
+
+  useEffect(() => {
+    document.title = workspace?.portalName?.trim() || 'Startup OS'
+  }, [workspace?.portalName])
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--os-bg)]">
-      {/* Sidebar */}
       <Sidebar
         mobileOpen={mobileOpen}
         onClose={() =>
@@ -18,16 +23,13 @@ function AppShell() {
         }
       />
 
-      {/* Main Application */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Persistent Topbar */}
         <Topbar
           onMenuClick={() =>
             setMobileOpen(true)
           }
         />
 
-        {/* Scrollable Content */}
         <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
           <Outlet />
         </main>
