@@ -41,10 +41,10 @@ function Topbar({
       ? 'Loading workspace...'
       : workspace?.name ||
         'No workspace'
+  const portalName = workspace?.portalName?.trim() || 'Startup OS'
 
   return (
     <header className="sticky top-0 z-30 flex h-[76px] items-center justify-between border-b border-[var(--os-border)] bg-[rgba(8,9,12,0.82)] px-4 backdrop-blur-xl sm:px-6 lg:px-8">
-      {/* Left */}
       <div className="flex min-w-0 items-center gap-3">
         <button
           type="button"
@@ -57,7 +57,7 @@ function Topbar({
 
         <div className="hidden min-w-0 items-center gap-2 text-sm sm:flex">
           <span className="shrink-0 text-[var(--os-text-muted)]">
-            Startup OS
+            {portalName}
           </span>
 
           <span className="text-[var(--os-text-muted)]">
@@ -70,9 +70,7 @@ function Topbar({
         </div>
       </div>
 
-      {/* Right */}
       <div className="flex items-center gap-2">
-        {/* Search */}
         <button
           type="button"
           aria-label="Search"
@@ -81,7 +79,6 @@ function Topbar({
           <Search size={19} />
         </button>
 
-        {/* Notifications */}
         <button
           type="button"
           aria-label="Notifications"
@@ -94,7 +91,6 @@ function Topbar({
 
         <div className="ml-1 hidden h-9 w-px bg-[var(--os-border)] sm:block" />
 
-        {/* User */}
         <button
           type="button"
           aria-label="Open profile"
