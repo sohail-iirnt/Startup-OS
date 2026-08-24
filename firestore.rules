@@ -16,7 +16,7 @@ service cloud.firestore {
     function canManageTasks(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin', 'manager']); }
     function canCreateTasks(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin', 'manager', 'member']); }
     function canUpdateOwnTask(workspaceId, taskId) { return hasActiveMembership(workspaceId) && userRole(workspaceId) in ['member', 'intern'] && get(/databases/$(database)/documents/tasks/$(taskId)).data.assigneeId == request.auth.uid; }
-    function canUpdateOwnProject(workspaceId, projectId) { return hasActiveMembership(workspaceId) && userRole(workspaceId) in ['member', 'intern'] && get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid; }
+    function canUpdateOwnProject(workspaceId, projectId) { return hasActiveMembership(workspaceId) && userRole(workspaceId) == 'intern' && (get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid || request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.memberIds); }
     function canApproveMemberUpdate(workspaceId) {
       return canApproveMembers(workspaceId)
         && request.resource.data.role in (isOwner(workspaceId) || isAdmin(workspaceId) ? ['admin', 'manager', 'member', 'intern', 'viewer'] : ['member', 'intern', 'viewer'])
@@ -81,7 +81,7 @@ service cloud.firestore {
 
     match /projects/{projectId} {
       allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && canOperate(request.resource.data.workspaceId);
-      allow read: if hasAnyRole(resource.data.workspaceId, ['owner', 'admin', 'manager', 'member', 'viewer']) || (hasRole(resource.data.workspaceId, 'intern') && resource.data.ownerId == request.auth.uid);
+      allow read: if hasAnyRole(resource.data.workspaceId, ['owner', 'admin', 'manager', 'member', 'viewer']) || (hasRole(resource.data.workspaceId, 'intern') && (resource.data.ownerId == request.auth.uid || request.auth.uid in resource.data.memberIds));
       allow update: if resource.data.workspaceId == request.resource.data.workspaceId && (canOperate(resource.data.workspaceId) || canUpdateOwnProject(resource.data.workspaceId, projectId));
       allow delete: if canManage(resource.data.workspaceId);
     }
