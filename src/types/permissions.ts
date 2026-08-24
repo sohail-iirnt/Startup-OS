@@ -21,22 +21,35 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly WorkspacePermission[]> = {
 const ROLE_ONLY_PERMISSIONS = new Set<WorkspacePermission>(['members.manage', 'access.manage', 'settings.manage'])
 const FULL_ACCESS_ROLES = new Set<UserRole>(['owner', 'admin'])
 
+/** Normalize legacy/title-case runtime role values before permission lookup. */
+export function normalizeUserRole(role: unknown): UserRole {
+  const normalized = String(role ?? '').trim().toLowerCase()
+  if (normalized === 'owner') return 'owner'
+  if (normalized === 'admin' || normalized === 'administrator') return 'admin'
+  if (normalized === 'manager') return 'manager'
+  if (normalized === 'member') return 'member'
+  if (normalized === 'intern') return 'intern'
+  if (normalized === 'viewer') return 'viewer'
+  return 'viewer'
+}
+
 export function roleHasPermission(role: UserRole, permission: WorkspacePermission): boolean {
-  return ROLE_PERMISSIONS[role].includes(permission)
+  return ROLE_PERMISSIONS[normalizeUserRole(role)].includes(permission)
 }
 
 export function getRolePermissions(role: UserRole): readonly WorkspacePermission[] {
-  return ROLE_PERMISSIONS[role]
+  return ROLE_PERMISSIONS[normalizeUserRole(role)]
 }
 
 export function getEffectivePermissions(member: WorkspaceMember | null): readonly WorkspacePermission[] {
   if (!member || member.status !== 'active') return []
 
-  // Owner/admin are workspace administrators. Their baseline access must never
-  // be accidentally removed by a stale/custom denial saved on their member doc.
-  if (FULL_ACCESS_ROLES.has(member.role)) return ROLE_PERMISSIONS[member.role]
+  const role = normalizeUserRole(member.role)
+  // Owner/admin are workspace administrators. Custom denials can never
+  // accidentally remove their administrator baseline.
+  if (FULL_ACCESS_ROLES.has(role)) return ROLE_PERMISSIONS[role]
 
-  const effective = new Set<WorkspacePermission>(ROLE_PERMISSIONS[member.role])
+  const effective = new Set<WorkspacePermission>(ROLE_PERMISSIONS[role])
   for (const permission of member.grantedPermissions ?? []) {
     if (!ROLE_ONLY_PERMISSIONS.has(permission)) effective.add(permission)
   }
@@ -48,16 +61,20 @@ export function getEffectivePermissions(member: WorkspaceMember | null): readonl
 
 export function memberHasPermission(member: WorkspaceMember | null, permission: WorkspacePermission): boolean {
   if (!member || member.status !== 'active') return false
-  if (FULL_ACCESS_ROLES.has(member.role)) return roleHasPermission(member.role, permission)
+
+  const role = normalizeUserRole(member.role)
+  if (FULL_ACCESS_ROLES.has(role)) return roleHasPermission(role, permission)
   if (ROLE_ONLY_PERMISSIONS.has(permission)) return false
   return getEffectivePermissions(member).includes(permission)
 }
 
 export function getPermissionState(member: WorkspaceMember | null, permission: WorkspacePermission): 'inherited' | 'granted' | 'denied' | 'unavailable' {
   if (!member || member.status !== 'active') return 'unavailable'
-  if (FULL_ACCESS_ROLES.has(member.role)) return 'inherited'
+
+  const role = normalizeUserRole(member.role)
+  if (FULL_ACCESS_ROLES.has(role)) return 'inherited'
   if (ROLE_ONLY_PERMISSIONS.has(permission)) return 'unavailable'
   if ((member.deniedPermissions ?? []).includes(permission)) return 'denied'
   if ((member.grantedPermissions ?? []).includes(permission)) return 'granted'
-  return roleHasPermission(member.role, permission) ? 'inherited' : 'unavailable'
+  return roleHasPermission(role, permission) ? 'inherited' : 'unavailable'
 }
