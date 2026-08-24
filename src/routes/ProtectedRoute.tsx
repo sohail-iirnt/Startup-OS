@@ -6,18 +6,22 @@ import {
 
 import { useAuth } from '../context/useAuth'
 import { useWorkspace } from '../context/useWorkspace'
+import type { WorkspacePermission } from '../types/permissions'
 
 type ProtectedRouteProps = {
   allowPendingApproval?: boolean
+  requiredPermission?: WorkspacePermission
 }
 
 function ProtectedRoute({
   allowPendingApproval = false,
+  requiredPermission,
 }: ProtectedRouteProps) {
   const { isAuthenticated, loading: authLoading } = useAuth()
   const {
     loading: workspaceLoading,
     hasWorkspaceAccess,
+    hasPermission,
     member,
   } = useWorkspace()
   const location = useLocation()
@@ -49,11 +53,19 @@ function ProtectedRoute({
   }
 
   if (!hasWorkspaceAccess) {
-    if (member?.status === 'rejected' || member?.status === 'suspended' || member?.status === 'pending') {
+    if (
+      member?.status === 'rejected' ||
+      member?.status === 'suspended' ||
+      member?.status === 'pending'
+    ) {
       return <Navigate to="/pending-approval" replace />
     }
 
     return <Navigate to="/pending-approval" replace />
+  }
+
+  if (requiredPermission && !hasPermission(requiredPermission)) {
+    return <Navigate to="/" replace />
   }
 
   return <Outlet />
