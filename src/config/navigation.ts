@@ -12,11 +12,13 @@ import {
   Users,
   Globe,
 } from 'lucide-react'
+import type { WorkspacePermission } from '../types/permissions'
 
 export type NavigationItem = {
   label: string
   path: string
   icon: LucideIcon
+  permission?: WorkspacePermission
 }
 
 export type NavigationSection = {
@@ -32,6 +34,7 @@ export const navigationSections: NavigationSection[] = [
         label: 'Dashboard',
         path: '/',
         icon: Gauge,
+        permission: 'workspace.view',
       },
     ],
   },
@@ -42,16 +45,19 @@ export const navigationSections: NavigationSection[] = [
         label: 'Clients',
         path: '/clients',
         icon: Users,
+        permission: 'clients.view',
       },
       {
         label: 'Projects',
         path: '/projects',
         icon: BriefcaseBusiness,
+        permission: 'projects.view',
       },
       {
         label: 'Websites & Apps',
         path: '/websites',
         icon: Globe,
+        permission: 'websites.view',
       },
     ],
   },
@@ -62,11 +68,13 @@ export const navigationSections: NavigationSection[] = [
         label: 'Tasks',
         path: '/tasks',
         icon: CheckSquare,
+        permission: 'tasks.view',
       },
       {
         label: 'Team',
         path: '/team',
         icon: Users,
+        permission: 'members.view',
       },
       {
         label: 'Calendar',
@@ -82,6 +90,7 @@ export const navigationSections: NavigationSection[] = [
         label: 'Finance',
         path: '/finance',
         icon: CircleDollarSign,
+        permission: 'finance.view',
       },
     ],
   },
@@ -117,6 +126,7 @@ export const navigationSections: NavigationSection[] = [
         label: 'Settings',
         path: '/settings',
         icon: Settings,
+        permission: 'settings.manage',
       },
     ],
   },
