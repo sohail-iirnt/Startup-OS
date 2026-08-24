@@ -73,16 +73,17 @@ function AccessControl() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
-  const canManage = hasPermission('members.manage') && Boolean(workspace)
+  const canManage = hasPermission('access.manage') && Boolean(workspace)
 
   useEffect(() => {
     if (!canManage || !workspace?.id) return undefined
     let active = true
+    let initialised = false
 
-    getWorkspaceMembers(workspace.id).then((items) => {
+    const applyMembers = (items: WorkspaceMember[]) => {
       if (!active) return
       setMembers(items)
-      if (!selectedMemberId) {
+      if (!initialised) {
         const first = items.find((item) => item.userId !== currentMember?.userId) ?? items[0]
         if (first) {
           const nextGranted = first.grantedPermissions ?? []
@@ -93,32 +94,20 @@ function AccessControl() {
           setSavedGranted(nextGranted)
           setSavedDenied(nextDenied)
         }
+        initialised = true
       }
-    }).catch((loadError: unknown) => {
+    }
+
+    getWorkspaceMembers(workspace.id).then(applyMembers).catch((loadError: unknown) => {
       if (active) setError(loadError instanceof Error ? loadError.message : 'Unable to load workspace members.')
     }).finally(() => { if (active) setLoading(false) })
 
-    const unsubscribe = subscribeToWorkspaceMembers(workspace.id, (items) => {
-      if (!active) return
-      setMembers(items)
-      if (!selectedMemberId) {
-        const first = items.find((item) => item.userId !== currentMember?.userId) ?? items[0]
-        if (first) {
-          const nextGranted = first.grantedPermissions ?? []
-          const nextDenied = first.deniedPermissions ?? []
-          setSelectedMemberId(first.userId)
-          setGranted(nextGranted)
-          setDenied(nextDenied)
-          setSavedGranted(nextGranted)
-          setSavedDenied(nextDenied)
-        }
-      }
-    }, (listenError) => {
+    const unsubscribe = subscribeToWorkspaceMembers(workspace.id, applyMembers, (listenError) => {
       if (active) setError(listenError.message)
     })
 
     return () => { active = false; unsubscribe() }
-  }, [canManage, workspace?.id, currentMember?.userId, selectedMemberId])
+  }, [canManage, workspace?.id, currentMember?.userId])
 
   const selectedMember = useMemo(() => members.find((item) => item.userId === selectedMemberId) ?? null, [members, selectedMemberId])
   const selectedPermissions = useMemo(() => new Set([...getRolePermissions(selectedMember?.role ?? 'viewer'), ...granted].filter((permission) => !denied.includes(permission))), [selectedMember?.role, granted, denied])
@@ -185,8 +174,8 @@ function AccessControl() {
   async function savePermissions() {
     if (!workspace?.id || !selectedMember || selectedMember.role === 'owner' || saving || !hasChanges) return
     const memberName = selectedMember.displayName || selectedMember.email || 'this member'
-    const nextGranted = [...granted]
-    const nextDenied = [...denied]
+    const nextGranted = [...new Set(granted)]
+    const nextDenied = [...new Set(denied)].filter((permission) => !nextGranted.includes(permission))
     setSaving(true)
     setError('')
     setMessage('Saving permission changes…')
@@ -207,7 +196,7 @@ function AccessControl() {
   }
 
   if (!canManage) {
-    return <div className="mx-auto w-full max-w-[1200px] p-4 sm:p-6 lg:p-8"><Card className="p-8 text-center"><LockKeyhole className="mx-auto text-[var(--os-warning)]" size={28} /><h1 className="mt-4 text-xl font-semibold text-[var(--os-text)]">Permission management restricted</h1><p className="mt-2 text-sm text-[var(--os-text-secondary)]">Only authorized workspace administrators can customize member permissions.</p></Card></div>
+    return <div className="mx-auto w-full max-w-[1200px] p-4 sm:p-6 lg:p-8"><Card className="p-8 text-center"><LockKeyhole className="mx-auto text-[var(--os-warning)]" size={28} /><h1 className="mt-4 text-xl font-semibold text-[var(--os-text)]">Permission management restricted</h1><p className="mt-2 text-sm text-[var(--os-text-secondary)]">Only workspace owners and authorized administrators can customize member permissions.</p></Card></div>
   }
 
   return (
