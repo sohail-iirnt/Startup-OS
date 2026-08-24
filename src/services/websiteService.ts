@@ -178,10 +178,37 @@ export async function createWebsite(
 export async function updateWebsite(
   websiteId: string,
   input: CreateWebsiteInput,
-): Promise<void> {
+): Promise<Website>
+
+export async function updateWebsite(
+  websiteId: string,
+  workspaceId: string,
+  input: CreateWebsiteInput,
+): Promise<Website>
+
+export async function updateWebsite(
+  websiteId: string,
+  workspaceIdOrInput: string | CreateWebsiteInput,
+  maybeInput?: CreateWebsiteInput,
+): Promise<Website> {
   if (!websiteId) {
     throw new Error(
       'Website ID is required.',
+    )
+  }
+
+  const workspaceId =
+    typeof workspaceIdOrInput === 'string'
+      ? workspaceIdOrInput
+      : undefined
+  const input =
+    typeof workspaceIdOrInput === 'string'
+      ? maybeInput
+      : workspaceIdOrInput
+
+  if (!input) {
+    throw new Error(
+      'Website update data is required.',
     )
   }
 
@@ -196,6 +223,23 @@ export async function updateWebsite(
     WEBSITES_COLLECTION,
     websiteId,
   )
+
+  const existing = await getDoc(websiteRef)
+
+  if (!existing.exists()) {
+    throw new Error(
+      'Website could not be found.',
+    )
+  }
+
+  if (
+    workspaceId &&
+    existing.data().workspaceId !== workspaceId
+  ) {
+    throw new Error(
+      'Website does not belong to this workspace.',
+    )
+  }
 
   await updateDoc(websiteRef, {
     name: input.name.trim(),
@@ -219,10 +263,33 @@ export async function updateWebsite(
     notes: input.notes.trim(),
     updatedAt: serverTimestamp(),
   })
+
+  const updated = await getDoc(websiteRef)
+
+  if (!updated.exists()) {
+    throw new Error(
+      'Website was updated but could not be loaded.',
+    )
+  }
+
+  return mapWebsite(
+    updated.id,
+    updated.data(),
+  )
 }
 
 export async function deleteWebsite(
   websiteId: string,
+): Promise<void>
+
+export async function deleteWebsite(
+  websiteId: string,
+  workspaceId: string,
+): Promise<void>
+
+export async function deleteWebsite(
+  websiteId: string,
+  workspaceId?: string,
 ): Promise<void> {
   if (!websiteId) {
     throw new Error(
@@ -235,6 +302,23 @@ export async function deleteWebsite(
     WEBSITES_COLLECTION,
     websiteId,
   )
+
+  const existing = await getDoc(websiteRef)
+
+  if (!existing.exists()) {
+    throw new Error(
+      'Website could not be found.',
+    )
+  }
+
+  if (
+    workspaceId &&
+    existing.data().workspaceId !== workspaceId
+  ) {
+    throw new Error(
+      'Website does not belong to this workspace.',
+    )
+  }
 
   await deleteDoc(websiteRef)
 }
