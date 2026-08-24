@@ -49,20 +49,21 @@ function Projects() {
   const [toDelete, setToDelete] = useState<Project | null>(null)
 
   useEffect(() => {
-    if (workspaceLoading || !workspace?.id || !user?.uid) return
+    if (workspaceLoading || !workspace?.id || !user?.uid) return undefined
+    const workspaceId = workspace.id
+    const userId = user.uid
     let active = true
-    setLoading(true); setError('')
     let unsubscribe: (() => void) | undefined
     async function start() {
       try {
         if (canSelectClient) {
-          const [clientResult, memberResult] = await Promise.all([getClients(workspace.id), getWorkspaceMembers(workspace.id)])
+          const [clientResult, memberResult] = await Promise.all([getClients(workspaceId), getWorkspaceMembers(workspaceId)])
           if (active) { setClients(clientResult); setMembers(memberResult) }
         } else {
-          const ownMember = await getWorkspaceMemberDetails(workspace.id, user.uid)
+          const ownMember = await getWorkspaceMemberDetails(workspaceId, userId)
           if (active) setMembers(ownMember ? [ownMember] : [])
         }
-        unsubscribe = await subscribeToProjects(workspace.id, (next) => { if (active) { setProjects(next); setLoading(false); setError('') } }, (listenError) => { if (active) { setError(listenError.message); setLoading(false) } })
+        unsubscribe = await subscribeToProjects(workspaceId, (next) => { if (active) { setProjects(next); setLoading(false); setError('') } }, (listenError) => { if (active) { setError(listenError.message); setLoading(false) } })
       } catch (loadError) {
         if (active) { setError(loadError instanceof Error ? loadError.message : 'Failed to load projects.'); setLoading(false) }
       }
