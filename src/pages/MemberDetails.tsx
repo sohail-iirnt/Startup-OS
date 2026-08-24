@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, BriefcaseBusiness, CheckCircle2, Clock3, Mail, Shield, UserRound, UserRoundX, Workflow } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Card from '../components/ui/Card'
@@ -7,16 +7,24 @@ import { useWorkspace } from '../context/useWorkspace'
 import { useAuth } from '../context/useAuth'
 import { getWorkspaceMemberDetails, updateMemberDesignation, updateMemberRole, suspendMember, reactivateMember } from '../services/memberService'
 import { getTasks } from '../services/taskService'
+import { getRolePermissions } from '../types/permissions'
 import type { UserRole } from '../types/common'
 import type { Task } from '../types/task'
 import type { WorkspaceMember } from '../types/workspace'
 
-const roles: UserRole[] = ['admin', 'manager', 'member', 'intern', 'viewer']
+const assignableRolesByManager: Record<UserRole, UserRole[]> = {
+  owner: ['admin', 'manager', 'member', 'intern', 'viewer'],
+  admin: ['manager', 'member', 'intern', 'viewer'],
+  manager: ['member', 'intern', 'viewer'],
+  member: [],
+  intern: [],
+  viewer: [],
+}
 
 function MemberDetails() {
   const { userId } = useParams<{ userId: string }>()
   const navigate = useNavigate()
-  const { workspace, hasPermission } = useWorkspace()
+  const { workspace, member: currentMember, hasPermission } = useWorkspace()
   const { user } = useAuth()
   const [member, setMember] = useState<WorkspaceMember | null>(null)
   const [tasks, setTasks] = useState<Task[]>([])
@@ -29,6 +37,7 @@ function MemberDetails() {
   const [now] = useState(() => Date.now())
 
   const canManage = hasPermission('members.manage')
+  const assignableRoles = useMemo(() => assignableRolesByManager[currentMember?.role ?? 'member'], [currentMember?.role])
 
   useEffect(() => {
     let cancelled = false
@@ -37,9 +46,17 @@ function MemberDetails() {
       setLoading(true)
       try {
         const [result, taskResult] = await Promise.all([getWorkspaceMemberDetails(workspace.id, userId), getTasks(workspace.id)])
-        if (!cancelled) { setMember(result); setTasks(taskResult.filter((task) => task.assigneeId === userId)); setDesignation(result?.designation || ''); setRole(result?.role || 'member') }
-      } catch (loadError) { if (!cancelled) setError(loadError instanceof Error ? loadError.message : 'Unable to load member.') }
-      finally { if (!cancelled) setLoading(false) }
+        if (!cancelled) {
+          setMember(result)
+          setTasks(taskResult.filter((task) => task.assigneeId === userId))
+          setDesignation(result?.designation || '')
+          setRole(result?.role || 'member')
+        }
+      } catch (loadError) {
+        if (!cancelled) setError(loadError instanceof Error ? loadError.message : 'Unable to load member.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
     }
     void load()
     return () => { cancelled = true }
@@ -47,14 +64,42 @@ function MemberDetails() {
 
   async function saveChanges() {
     if (!workspace?.id || !member || !canManage || member.userId === user?.uid) return
-    setSaving(true); setError(''); setSaved(false)
-    try { await updateMemberRole(workspace.id, member.userId, role); await updateMemberDesignation(workspace.id, member.userId, designation); setMember({ ...member, role, designation }); setSaved(true) } catch (saveError) { setError(saveError instanceof Error ? saveError.message : 'Unable to save member changes.') } finally { setSaving(false) }
+    if (!assignableRoles.includes(role) && role !== member.role) {
+      setError('You cannot assign this role. Only owners and admins can grant elevated access.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    setSaved(false)
+    try {
+      await updateMemberRole(workspace.id, member.userId, role)
+      await updateMemberDesignation(workspace.id, member.userId, designation)
+      setMember({ ...member, role, designation })
+      setSaved(true)
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save member changes.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function toggleSuspension() {
     if (!workspace?.id || !member || !canManage || member.userId === user?.uid) return
-    setSaving(true); setError('')
-    try { if (member.status === 'suspended') { await reactivateMember(workspace.id, member.userId); setMember({ ...member, status: 'active' }) } else { await suspendMember(workspace.id, member.userId); setMember({ ...member, status: 'suspended' }) } } catch (actionError) { setError(actionError instanceof Error ? actionError.message : 'Unable to update member status.') } finally { setSaving(false) }
+    setSaving(true)
+    setError('')
+    try {
+      if (member.status === 'suspended') {
+        await reactivateMember(workspace.id, member.userId)
+        setMember({ ...member, status: 'active' })
+      } else {
+        await suspendMember(workspace.id, member.userId)
+        setMember({ ...member, status: 'suspended' })
+      }
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'Unable to update member status.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (loading) return <div className="mx-auto w-full max-w-[1100px] p-6 lg:p-8"><Card className="p-10 text-center text-sm text-[var(--os-text-secondary)]">Loading member profile...</Card></div>
@@ -66,7 +111,8 @@ function MemberDetails() {
   const completedTasks = tasks.filter((task) => task.status === 'completed')
   const overdueTasks = tasks.filter((task) => task.dueDate && task.dueDate.getTime() < now && task.status !== 'completed' && task.status !== 'cancelled')
   const completionRate = tasks.length ? Math.round((completedTasks.length / tasks.length) * 100) : 0
+  const effectivePermissions = getRolePermissions(member.role)
 
-  return <div className="mx-auto w-full max-w-[1100px] p-4 sm:p-6 lg:p-8"><Link to="/team" className="inline-flex items-center gap-2 text-sm font-medium text-[var(--os-text-secondary)] hover:text-[var(--os-text)]"><ArrowLeft size={16} /> Back to Team</Link><section className="mt-6 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-4">{member.photoURL ? <img src={member.photoURL} alt="" className="h-16 w-16 rounded-2xl object-cover" /> : <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--os-accent-soft)] text-lg font-bold text-[var(--os-accent)]">{initials}</div>}<div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--os-accent)]">Team member</p><h1 className="mt-1 text-3xl font-semibold tracking-tight text-[var(--os-text)]">{member.displayName || 'Unnamed member'}</h1><p className="mt-1 text-sm text-[var(--os-text-secondary)]">{member.designation || member.role}</p></div></div><span className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${member.status === 'active' ? 'bg-[var(--os-success-soft)] text-[var(--os-success)]' : 'bg-[var(--os-warning-soft)] text-[var(--os-warning)]'}`}><CheckCircle2 size={14} /> {member.status}</span></section>{error && <div role="alert" className="mt-6 rounded-xl border border-[rgba(255,100,124,0.25)] bg-[var(--os-danger-soft)] px-4 py-3 text-sm text-[var(--os-danger)]">{error}</div>}{saved && <div className="mt-6 rounded-xl border border-[var(--os-success-border)] bg-[var(--os-success-soft)] px-4 py-3 text-sm text-[var(--os-success)]">Member profile updated successfully.</div>}<div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[{ label: 'Active tasks', value: activeTasks.length, icon: Workflow, className: 'text-[var(--os-info)]' }, { label: 'Completed', value: completedTasks.length, icon: CheckCircle2, className: 'text-[var(--os-success)]' }, { label: 'Overdue', value: overdueTasks.length, icon: Clock3, className: 'text-[var(--os-danger)]' }, { label: 'Completion', value: `${completionRate}%`, icon: CheckCircle2, className: 'text-[var(--os-accent)]' }].map(({ label, value, icon: Icon, className }) => <Card key={label} className="p-5"><div className="flex items-center gap-3"><Icon size={19} className={className} /><div><p className="text-xs text-[var(--os-text-muted)]">{label}</p><p className="mt-1 text-2xl font-semibold text-[var(--os-text)]">{value}</p></div></div></Card>)}</div><div className="mt-6 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]"><Card className="p-6"><h2 className="text-base font-semibold text-[var(--os-text)]">Member profile</h2><p className="mt-1 text-sm text-[var(--os-text-secondary)]">Identity and workspace assignment information.</p><div className="mt-6 space-y-3"><div className="flex items-center gap-3 rounded-xl border border-[var(--os-border)] p-4"><Mail size={18} className="text-[var(--os-text-muted)]" /><div><p className="text-xs text-[var(--os-text-muted)]">Email</p><p className="mt-1 text-sm text-[var(--os-text)]">{member.email || 'Not available'}</p></div></div><div className="flex items-center gap-3 rounded-xl border border-[var(--os-border)] p-4"><Shield size={18} className="text-[var(--os-text-muted)]" /><div><p className="text-xs text-[var(--os-text-muted)]">Role</p><p className="mt-1 text-sm capitalize text-[var(--os-text)]">{member.role}</p></div></div><div className="flex items-center gap-3 rounded-xl border border-[var(--os-border)] p-4"><BriefcaseBusiness size={18} className="text-[var(--os-text-muted)]" /><div><p className="text-xs text-[var(--os-text-muted)]">Workspace</p><p className="mt-1 text-sm text-[var(--os-text)]">{workspace?.name}</p></div></div></div></Card><Card className="p-6"><h2 className="text-base font-semibold text-[var(--os-text)]">Access & management</h2><p className="mt-1 text-sm text-[var(--os-text-secondary)]">Manage this member's operational role.</p>{canManage && !isSelf ? <div className="mt-6 space-y-4"><div><label htmlFor="role" className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-[var(--os-text-secondary)]">Role</label><select id="role" value={role} onChange={(event) => setRole(event.target.value as UserRole)} disabled={saving} className="os-focus-ring h-11 w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 text-sm capitalize text-[var(--os-text)]">{roles.map((item) => <option key={item} value={item}>{item}</option>)}</select></div><div><label htmlFor="designation" className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-[var(--os-text-secondary)]">Designation</label><input id="designation" value={designation} onChange={(event) => setDesignation(event.target.value)} disabled={saving} className="os-focus-ring h-11 w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 text-sm text-[var(--os-text)]" placeholder="e.g. Project Manager" /></div><Button type="button" onClick={() => void saveChanges()} disabled={saving}>{saving ? 'Saving...' : 'Save changes'}</Button><button type="button" onClick={() => void toggleSuspension()} disabled={saving} className="os-focus-ring flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--os-border)] text-sm font-semibold text-[var(--os-text-secondary)] hover:border-[var(--os-border-strong)] hover:text-[var(--os-text)]">{member.status === 'suspended' ? <UserRound size={16} /> : <UserRoundX size={16} />}{member.status === 'suspended' ? 'Reactivate member' : 'Suspend member'}</button></div> : <div className="mt-6 rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] p-4 text-sm leading-6 text-[var(--os-text-secondary)]">{isSelf ? 'Your own role cannot be changed from this profile.' : 'You do not have permission to manage this member.'}</div>}</Card></div><Card className="mt-6 p-6"><div className="flex items-center justify-between gap-4"><div><h2 className="text-base font-semibold text-[var(--os-text)]">Assigned workload</h2><p className="mt-1 text-sm text-[var(--os-text-secondary)]">Current tasks assigned to this member.</p></div><span className="rounded-full bg-[var(--os-surface-hover)] px-3 py-1 text-xs font-semibold text-[var(--os-text-secondary)]">{tasks.length} total</span></div>{tasks.length === 0 ? <div className="mt-5 rounded-xl border border-dashed border-[var(--os-border)] p-6 text-center text-sm text-[var(--os-text-muted)]">No tasks are currently assigned to this member.</div> : <div className="mt-5 space-y-2">{tasks.slice(0, 8).map((task) => <div key={task.id} className="flex flex-col gap-2 rounded-xl border border-[var(--os-border)] p-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="truncate text-sm font-medium text-[var(--os-text)]">{task.title}</p><p className="mt-1 text-xs capitalize text-[var(--os-text-muted)]">{task.status} · {task.priority}</p></div>{task.dueDate && <span className="text-xs text-[var(--os-text-secondary)]">Due {task.dueDate.toLocaleDateString()}</span>}</div>)}</div>}</Card></div>
+  return <div className="mx-auto w-full max-w-[1100px] p-4 sm:p-6 lg:p-8"><Link to="/team" className="inline-flex items-center gap-2 text-sm font-medium text-[var(--os-text-secondary)] hover:text-[var(--os-text)]"><ArrowLeft size={16} /> Back to Team</Link><section className="mt-6 flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-4">{member.photoURL ? <img src={member.photoURL} alt="" className="h-16 w-16 rounded-2xl object-cover" /> : <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--os-accent-soft)] text-lg font-bold text-[var(--os-accent)]">{initials}</div>}<div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--os-accent)]">Team member</p><h1 className="mt-1 text-3xl font-semibold tracking-tight text-[var(--os-text)]">{member.displayName || 'Unnamed member'}</h1><p className="mt-1 text-sm text-[var(--os-text-secondary)]">{member.designation || member.role}</p></div></div><span className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${member.status === 'active' ? 'bg-[var(--os-success-soft)] text-[var(--os-success)]' : 'bg-[var(--os-warning-soft)] text-[var(--os-warning)]'}`}><CheckCircle2 size={14} /> {member.status}</span></section>{error && <div role="alert" className="mt-6 rounded-xl border border-[rgba(255,100,124,0.25)] bg-[var(--os-danger-soft)] px-4 py-3 text-sm text-[var(--os-danger)]">{error}</div>}{saved && <div className="mt-6 rounded-xl border border-[var(--os-success-border)] bg-[var(--os-success-soft)] px-4 py-3 text-sm text-[var(--os-success)]">Member profile updated successfully.</div>}<div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[{ label: 'Active tasks', value: activeTasks.length, icon: Workflow, className: 'text-[var(--os-info)]' }, { label: 'Completed', value: completedTasks.length, icon: CheckCircle2, className: 'text-[var(--os-success)]' }, { label: 'Overdue', value: overdueTasks.length, icon: Clock3, className: 'text-[var(--os-danger)]' }, { label: 'Completion', value: `${completionRate}%`, icon: CheckCircle2, className: 'text-[var(--os-accent)]' }].map(({ label, value, icon: Icon, className }) => <Card key={label} className="p-5"><div className="flex items-center gap-3"><Icon size={19} className={className} /><div><p className="text-xs text-[var(--os-text-muted)]">{label}</p><p className="mt-1 text-2xl font-semibold text-[var(--os-text)]">{value}</p></div></div></Card>)}</div><div className="mt-6 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]"><Card className="p-6"><h2 className="text-base font-semibold text-[var(--os-text)]">Member profile</h2><p className="mt-1 text-sm text-[var(--os-text-secondary)]">Identity and workspace assignment information.</p><div className="mt-6 space-y-3"><div className="flex items-center gap-3 rounded-xl border border-[var(--os-border)] p-4"><Mail size={18} className="text-[var(--os-text-muted)]" /><div><p className="text-xs text-[var(--os-text-muted)]">Email</p><p className="mt-1 text-sm text-[var(--os-text)]">{member.email || 'Not available'}</p></div></div><div className="flex items-center gap-3 rounded-xl border border-[var(--os-border)] p-4"><Shield size={18} className="text-[var(--os-text-muted)]" /><div><p className="text-xs text-[var(--os-text-muted)]">Role</p><p className="mt-1 text-sm capitalize text-[var(--os-text)]">{member.role}</p></div></div><div className="flex items-center gap-3 rounded-xl border border-[var(--os-border)] p-4"><BriefcaseBusiness size={18} className="text-[var(--os-text-muted)]" /><div><p className="text-xs text-[var(--os-text-muted)]">Workspace</p><p className="mt-1 text-sm text-[var(--os-text)]">{workspace?.name}</p></div></div></div></Card><Card className="p-6"><h2 className="text-base font-semibold text-[var(--os-text)]">Access & management</h2><p className="mt-1 text-sm text-[var(--os-text-secondary)]">Manage this member's operational role.</p>{canManage && !isSelf ? <div className="mt-6 space-y-4"><div><label htmlFor="role" className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-[var(--os-text-secondary)]">Role</label><select id="role" value={role} onChange={(event) => setRole(event.target.value as UserRole)} disabled={saving} className="os-focus-ring h-11 w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 text-sm capitalize text-[var(--os-text)]"><option value={member.role}>{member.role} (current)</option>{assignableRoles.filter((item) => item !== member.role).map((item) => <option key={item} value={item}>{item}</option>)}</select><p className="mt-2 text-xs leading-5 text-[var(--os-text-muted)]">Role changes immediately change this account's effective Startup OS permissions on its next workspace refresh.</p></div><div><label htmlFor="designation" className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-[var(--os-text-secondary)]">Designation</label><input id="designation" value={designation} onChange={(event) => setDesignation(event.target.value)} disabled={saving} className="os-focus-ring h-11 w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 text-sm text-[var(--os-text)]" placeholder="e.g. Project Manager" /></div><Button type="button" onClick={() => void saveChanges()} disabled={saving}>{saving ? 'Saving...' : 'Save changes'}</Button><button type="button" onClick={() => void toggleSuspension()} disabled={saving} className="os-focus-ring flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--os-border)] text-sm font-semibold text-[var(--os-text-secondary)] hover:border-[var(--os-border-strong)] hover:text-[var(--os-text)]">{member.status === 'suspended' ? <UserRound size={16} /> : <UserRoundX size={16} />}{member.status === 'suspended' ? 'Reactivate member' : 'Suspend member'}</button></div> : <div className="mt-6 rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] p-4 text-sm leading-6 text-[var(--os-text-secondary)]">{isSelf ? 'Your own role cannot be changed from this profile.' : 'You do not have permission to manage this member.'}</div>}</Card></div><Card className="mt-6 p-6"><div className="flex items-center justify-between gap-4"><div><h2 className="text-base font-semibold text-[var(--os-text)]">Effective permissions</h2><p className="mt-1 text-sm text-[var(--os-text-secondary)]">Access granted by the approved <span className="font-semibold capitalize">{member.role}</span> role.</p></div><span className="rounded-full bg-[var(--os-accent-soft)] px-3 py-1 text-xs font-semibold text-[var(--os-accent)]">{effectivePermissions.length} permissions</span></div><div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{effectivePermissions.map((permission) => <div key={permission} className="rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 py-2.5 font-mono text-[11px] text-[var(--os-text-secondary)]">{permission}</div>)}</div></Card><Card className="mt-6 p-6"><div className="flex items-center justify-between gap-4"><div><h2 className="text-base font-semibold text-[var(--os-text)]">Assigned workload</h2><p className="mt-1 text-sm text-[var(--os-text-secondary)]">Current tasks assigned to this member.</p></div><span className="rounded-full bg-[var(--os-surface-hover)] px-3 py-1 text-xs font-semibold text-[var(--os-text-secondary)]">{tasks.length} total</span></div>{tasks.length === 0 ? <div className="mt-5 rounded-xl border border-dashed border-[var(--os-border)] p-6 text-center text-sm text-[var(--os-text-muted)]">No tasks are currently assigned to this member.</div> : <div className="mt-5 space-y-2">{tasks.slice(0, 8).map((task) => <div key={task.id} className="flex flex-col gap-2 rounded-xl border border-[var(--os-border)] p-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="truncate text-sm font-medium text-[var(--os-text)]">{task.title}</p><p className="mt-1 text-xs capitalize text-[var(--os-text-muted)]">{task.status} · {task.priority}</p></div>{task.dueDate && <span className="text-xs text-[var(--os-text-secondary)]">Due {task.dueDate.toLocaleDateString()}</span>}</div>)}</div>}</Card></div>
 }
 export default MemberDetails
