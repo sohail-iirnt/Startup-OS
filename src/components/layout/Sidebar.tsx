@@ -9,6 +9,7 @@ import {
   Check,
   Plus,
   Settings2,
+  ShieldCheck,
 } from 'lucide-react'
 
 import { navigationSections } from '../../config/navigation'
@@ -27,6 +28,7 @@ function Sidebar({
   const {
     workspace,
     loading,
+    hasPermission,
   } = useWorkspace()
 
   const { user } = useAuth()
@@ -309,6 +311,13 @@ function Sidebar({
 
                 <div className="space-y-1">
                   {section.items.map((item) => {
+                    if (
+                      item.permission &&
+                      !hasPermission(item.permission)
+                    ) {
+                      return null
+                    }
+
                     const Icon = item.icon
 
                     return (
@@ -349,6 +358,38 @@ function Sidebar({
                       </NavLink>
                     )
                   })}
+
+                  {section.label === 'Operations' &&
+                    hasPermission('members.approve') && (
+                      <NavLink
+                        to="/team/approvals"
+                        onClick={onClose}
+                        className={({ isActive }) =>
+                          [
+                            'group flex items-center gap-3 rounded-xl px-3 py-2.5',
+                            'text-sm font-medium transition-all duration-200',
+                            isActive
+                              ? 'bg-[var(--os-accent-soft)] text-[var(--os-text)]'
+                              : 'text-[var(--os-text-secondary)] hover:bg-[var(--os-surface-hover)] hover:text-[var(--os-text)]',
+                          ].join(' ')
+                        }
+                      >
+                        {({ isActive }) => (
+                          <>
+                            <ShieldCheck
+                              size={17}
+                              strokeWidth={isActive ? 2.2 : 1.8}
+                              className={
+                                isActive
+                                  ? 'text-[var(--os-accent)]'
+                                  : 'text-[var(--os-text-muted)] transition-colors group-hover:text-[var(--os-text-secondary)]'
+                              }
+                            />
+                            <span className="truncate">Member Approvals</span>
+                          </>
+                        )}
+                      </NavLink>
+                    )}
                 </div>
               </div>
             ))}
