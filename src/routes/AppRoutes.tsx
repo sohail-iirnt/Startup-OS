@@ -78,6 +78,8 @@ function AppRoutes() {
           </Route>
           <Route element={<ProtectedRoute requiredPermission="settings.manage" />}>
             <Route path="/settings" element={<WorkspaceSettings />} />
+          </Route>
+          <Route element={<ProtectedRoute requiredPermission="access.manage" />}>
             <Route path="/settings/access-control" element={<AccessControl />} />
           </Route>
           <Route path="/auth-test" element={<AuthTest />} />
