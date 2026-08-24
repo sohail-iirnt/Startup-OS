@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, BriefcaseBusiness, CheckCircle2, Mail, Shield, UserRound, UserRoundX } from 'lucide-react'
+import { ArrowLeft, BriefcaseBusiness, CheckCircle2, Clock3, Mail, Shield, UserRound, UserRoundX, Workflow } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 
 import Card from '../components/ui/Card'
@@ -7,7 +7,9 @@ import Button from '../components/ui/Button'
 import { useWorkspace } from '../context/useWorkspace'
 import { useAuth } from '../context/useAuth'
 import { getWorkspaceMemberDetails, updateMemberDesignation, updateMemberRole, suspendMember, reactivateMember } from '../services/memberService'
+import { getTasks } from '../services/taskService'
 import type { UserRole } from '../types/common'
+import type { Task } from '../types/task'
 import type { WorkspaceMember } from '../types/workspace'
 
 const roles: UserRole[] = ['admin', 'manager', 'member', 'intern', 'viewer']
@@ -18,6 +20,7 @@ function MemberDetails() {
   const { workspace, hasPermission } = useWorkspace()
   const { user } = useAuth()
   const [member, setMember] = useState<WorkspaceMember | null>(null)
+  const [tasks, setTasks] = useState<Task[]>([])
   const [designation, setDesignation] = useState('')
   const [role, setRole] = useState<UserRole>('member')
   const [loading, setLoading] = useState(true)
@@ -33,9 +36,13 @@ function MemberDetails() {
       if (!workspace?.id || !userId) return
       setLoading(true)
       try {
-        const result = await getWorkspaceMemberDetails(workspace.id, userId)
+        const [result, taskResult] = await Promise.all([
+          getWorkspaceMemberDetails(workspace.id, userId),
+          getTasks(workspace.id),
+        ])
         if (!cancelled) {
           setMember(result)
+          setTasks(taskResult.filter((task) => task.assigneeId === userId))
           setDesignation(result?.designation || '')
           setRole(result?.role || 'member')
         }
@@ -91,6 +98,10 @@ function MemberDetails() {
 
   const isSelf = member.userId === user?.uid
   const initials = (member.displayName || member.email || 'Member').split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
+  const activeTasks = tasks.filter((task) => task.status !== 'completed' && task.status !== 'cancelled')
+  const completedTasks = tasks.filter((task) => task.status === 'completed')
+  const overdueTasks = tasks.filter((task) => task.dueDate && task.dueDate.getTime() < Date.now() && task.status !== 'completed' && task.status !== 'cancelled')
+  const completionRate = tasks.length ? Math.round((completedTasks.length / tasks.length) * 100) : 0
 
   return (
     <div className="mx-auto w-full max-w-[1100px] p-4 sm:p-6 lg:p-8">
@@ -106,11 +117,27 @@ function MemberDetails() {
       {error && <div role="alert" className="mt-6 rounded-xl border border-[rgba(255,100,124,0.25)] bg-[var(--os-danger-soft)] px-4 py-3 text-sm text-[var(--os-danger)]">{error}</div>}
       {saved && <div className="mt-6 rounded-xl border border-[var(--os-success-border)] bg-[var(--os-success-soft)] px-4 py-3 text-sm text-[var(--os-success)]">Member profile updated successfully.</div>}
 
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {[
+          { label: 'Active tasks', value: activeTasks.length, icon: Workflow, className: 'text-[var(--os-info)]' },
+          { label: 'Completed', value: completedTasks.length, icon: CheckCircle2, className: 'text-[var(--os-success)]' },
+          { label: 'Overdue', value: overdueTasks.length, icon: Clock3, className: 'text-[var(--os-danger)]' },
+          { label: 'Completion', value: `${completionRate}%`, icon: CheckCircle2, className: 'text-[var(--os-accent)]' },
+        ].map(({ label, value, icon: Icon, className }) => (
+          <Card key={label} className="p-5"><div className="flex items-center gap-3"><Icon size={19} className={className} /><div><p className="text-xs text-[var(--os-text-muted)]">{label}</p><p className="mt-1 text-2xl font-semibold text-[var(--os-text)]">{value}</p></div></div></Card>
+        ))}
+      </div>
+
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <Card className="p-6"><h2 className="text-base font-semibold text-[var(--os-text)]">Member profile</h2><p className="mt-1 text-sm text-[var(--os-text-secondary)]">Identity and workspace assignment information.</p><div className="mt-6 space-y-3"><div className="flex items-center gap-3 rounded-xl border border-[var(--os-border)] p-4"><Mail size={18} className="text-[var(--os-text-muted)]" /><div><p className="text-xs text-[var(--os-text-muted)]">Email</p><p className="mt-1 text-sm text-[var(--os-text)]">{member.email || 'Not available'}</p></div></div><div className="flex items-center gap-3 rounded-xl border border-[var(--os-border)] p-4"><Shield size={18} className="text-[var(--os-text-muted)]" /><div><p className="text-xs text-[var(--os-text-muted)]">Role</p><p className="mt-1 text-sm capitalize text-[var(--os-text)]">{member.role}</p></div></div><div className="flex items-center gap-3 rounded-xl border border-[var(--os-border)] p-4"><BriefcaseBusiness size={18} className="text-[var(--os-text-muted)]" /><div><p className="text-xs text-[var(--os-text-muted)]">Workspace</p><p className="mt-1 text-sm text-[var(--os-text)]">{workspace?.name}</p></div></div></div></Card>
 
         <Card className="p-6"><h2 className="text-base font-semibold text-[var(--os-text)]">Access & management</h2><p className="mt-1 text-sm text-[var(--os-text-secondary)]">Manage this member's operational role.</p>{canManage && !isSelf ? <div className="mt-6 space-y-4"><div><label htmlFor="role" className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-[var(--os-text-secondary)]">Role</label><select id="role" value={role} onChange={(event) => setRole(event.target.value as UserRole)} disabled={saving} className="os-focus-ring h-11 w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 text-sm capitalize text-[var(--os-text)]">{roles.map((item) => <option key={item} value={item}>{item}</option>)}</select></div><div><label htmlFor="designation" className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-[var(--os-text-secondary)]">Designation</label><input id="designation" value={designation} onChange={(event) => setDesignation(event.target.value)} disabled={saving} className="os-focus-ring h-11 w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 text-sm text-[var(--os-text)]" placeholder="e.g. Project Manager" /></div><Button type="button" onClick={() => void saveChanges()} disabled={saving}>{saving ? 'Saving...' : 'Save changes'}</Button><button type="button" onClick={() => void toggleSuspension()} disabled={saving} className="os-focus-ring flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--os-border)] text-sm font-semibold text-[var(--os-text-secondary)] hover:border-[var(--os-border-strong)] hover:text-[var(--os-text)]">{member.status === 'suspended' ? <UserRound size={16} /> : <UserRoundX size={16} />}{member.status === 'suspended' ? 'Reactivate member' : 'Suspend member'}</button></div> : <div className="mt-6 rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] p-4 text-sm leading-6 text-[var(--os-text-secondary)]">{isSelf ? 'Your own role cannot be changed from this profile.' : 'You do not have permission to manage this member.'}</div>}</Card>
       </div>
+
+      <Card className="mt-6 p-6">
+        <div className="flex items-center justify-between gap-4"><div><h2 className="text-base font-semibold text-[var(--os-text)]">Assigned workload</h2><p className="mt-1 text-sm text-[var(--os-text-secondary)]">Current tasks assigned to this member.</p></div><span className="rounded-full bg-[var(--os-surface-hover)] px-3 py-1 text-xs font-semibold text-[var(--os-text-secondary)]">{tasks.length} total</span></div>
+        {tasks.length === 0 ? <div className="mt-5 rounded-xl border border-dashed border-[var(--os-border)] p-6 text-center text-sm text-[var(--os-text-muted)]">No tasks are currently assigned to this member.</div> : <div className="mt-5 space-y-2">{tasks.slice(0, 8).map((task) => <div key={task.id} className="flex flex-col gap-2 rounded-xl border border-[var(--os-border)] p-4 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="truncate text-sm font-medium text-[var(--os-text)]">{task.title}</p><p className="mt-1 text-xs capitalize text-[var(--os-text-muted)]">{task.status} · {task.priority}</p></div>{task.dueDate && <span className="text-xs text-[var(--os-text-secondary)]">Due {task.dueDate.toLocaleDateString()}</span>}</div>)}</div>}
+      </Card>
     </div>
   )
 }
