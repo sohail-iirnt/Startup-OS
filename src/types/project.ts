@@ -10,6 +10,7 @@ export type Project = BaseEntity & {
   clientName: string
   ownerId: string
   ownerName: string
+  memberIds: string[]
   type: ProjectType
   status: ProjectStatus
   priority: ProjectPriority
@@ -27,6 +28,7 @@ export type CreateProjectInput = {
   clientName: string
   ownerId: string
   ownerName: string
+  memberIds: string[]
   type: ProjectType
   status: ProjectStatus
   priority: ProjectPriority
