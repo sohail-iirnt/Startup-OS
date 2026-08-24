@@ -15,54 +15,101 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
 
   const loadWorkspace = useCallback(async () => {
     if (!user) return { workspace: null, member: null }
+
     const userWorkspace = await initializeDefaultWorkspace(user.uid, user)
     if (!userWorkspace) return { workspace: null, member: null }
-    const [latestWorkspace, workspaceMember] = await Promise.all([getWorkspace(userWorkspace.id), getWorkspaceMember(userWorkspace.id, user.uid)])
-    if (!workspaceMember || workspaceMember.status !== 'active') return { workspace: latestWorkspace ?? userWorkspace, member: workspaceMember }
-    return { workspace: latestWorkspace ?? userWorkspace, member: workspaceMember }
+
+    const [latestWorkspace, workspaceMember] = await Promise.all([
+      getWorkspace(userWorkspace.id),
+      getWorkspaceMember(userWorkspace.id, user.uid),
+    ])
+
+    return {
+      workspace: latestWorkspace ?? userWorkspace,
+      member: workspaceMember,
+    }
   }, [user])
 
   useEffect(() => {
     let cancelled = false
+
     async function initializeWorkspace() {
       if (authLoading) return
+
       if (!user) {
-        if (!cancelled) { setWorkspace(null); setMember(null); setLoading(false) }
+        if (!cancelled) {
+          setWorkspace(null)
+          setMember(null)
+          setLoading(false)
+        }
         return
       }
+
+      setLoading(true)
       try {
         const loaded = await loadWorkspace()
-        if (!cancelled) { setWorkspace(loaded.workspace); setMember(loaded.member) }
+        if (!cancelled) {
+          setWorkspace(loaded.workspace)
+          setMember(loaded.member)
+        }
       } catch (error) {
         console.error('Failed to load workspace:', error)
-        if (!cancelled) { setWorkspace(null); setMember(null) }
+        if (!cancelled) {
+          setWorkspace(null)
+          setMember(null)
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
     }
+
     void initializeWorkspace()
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [authLoading, user, loadWorkspace])
 
+  // Workspace branding is intentionally subscribed independently from membership.
+  // This keeps portal-name changes live without causing the provider to re-subscribe
+  // every time the member document changes.
   useEffect(() => {
-    if (!workspace?.id) return undefined
-    return subscribeToWorkspace(workspace.id, (nextWorkspace) => {
-      setWorkspace(nextWorkspace)
-    }, (error) => console.error('Workspace listener failed:', error))
+    const workspaceId = workspace?.id
+    if (!workspaceId) return undefined
+
+    return subscribeToWorkspace(
+      workspaceId,
+      (nextWorkspace) => {
+        setWorkspace(nextWorkspace)
+      },
+      (error) => console.error('Workspace listener failed:', error),
+    )
   }, [workspace?.id])
 
   useEffect(() => {
-    if (!workspace?.id || !user?.uid || member?.status !== 'active') return undefined
-    return subscribeToWorkspaceMember(workspace.id, user.uid, (nextMember) => {
-      setMember(nextMember)
-      if (nextMember?.status !== 'active') setLoading(false)
-    }, (error) => console.error('Workspace membership listener failed:', error))
-  }, [workspace?.id, user?.uid, member?.status])
+    const workspaceId = workspace?.id
+    const userId = user?.uid
+    if (!workspaceId || !userId) return undefined
+
+    return subscribeToWorkspaceMember(
+      workspaceId,
+      userId,
+      (nextMember) => {
+        setMember(nextMember)
+      },
+      (error) => console.error('Workspace membership listener failed:', error),
+    )
+  }, [workspace?.id, user?.uid])
 
   const refreshWorkspace = useCallback(async () => {
-    if (!user) { setWorkspace(null); setMember(null); return }
+    if (!user) {
+      setWorkspace(null)
+      setMember(null)
+      setLoading(false)
+      return
+    }
+
+    setLoading(true)
     try {
-      setLoading(true)
       const loaded = await loadWorkspace()
       setWorkspace(loaded.workspace)
       setMember(loaded.member)
@@ -74,8 +121,19 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
   }, [user, loadWorkspace])
 
   const hasWorkspaceAccess = Boolean(workspace && member?.status === 'active')
-  const hasPermission = useCallback((permission: Parameters<typeof memberHasPermission>[1]) => memberHasPermission(member, permission), [member])
+  const hasPermission = useCallback(
+    (permission: Parameters<typeof memberHasPermission>[1]) => memberHasPermission(member, permission),
+    [member],
+  )
 
-  const value: WorkspaceContextValue = { workspace, member, loading: authLoading || loading, hasWorkspaceAccess, hasPermission, refreshWorkspace }
+  const value: WorkspaceContextValue = {
+    workspace,
+    member,
+    loading: authLoading || loading,
+    hasWorkspaceAccess,
+    hasPermission,
+    refreshWorkspace,
+  }
+
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>
 }
