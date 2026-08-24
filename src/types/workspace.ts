@@ -12,6 +12,10 @@ export type Workspace = {
   description?: string
   ownerId: ID
   workspaceCode?: string
+  /** Product/portal name shown throughout the authenticated Startup OS experience. */
+  portalName?: string
+  /** Short product/portal descriptor shown beneath the portal name. */
+  portalSubtitle?: string
 } & Omit<BaseEntity, 'workspaceId' | 'createdBy'>
 
 export type WorkspaceMember = {
