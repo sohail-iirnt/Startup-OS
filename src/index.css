@@ -76,24 +76,32 @@ a { color: inherit; text-decoration: none; }
 img, svg { display: block; }
 input, textarea, select {
   color: var(--os-text);
-  color-scheme: dark;
+  color-scheme: dark !important;
 }
 
-/* Native form controls stay visually aligned with the Startup OS dark theme.
-   This also fixes browser-native select menus that otherwise fall back to a white menu. */
+/* Native form controls are deliberately forced into the Startup OS dark palette.
+   Chromium/Windows can otherwise paint the opened option list with a white native theme. */
 select {
-  background-color: var(--os-surface-raised);
-  border-color: var(--os-border);
+  appearance: auto;
+  background-color: var(--os-surface-raised) !important;
+  color: var(--os-text) !important;
+  border-color: var(--os-border) !important;
+  color-scheme: dark !important;
+  accent-color: var(--os-accent);
 }
 select option,
 select optgroup {
-  background-color: var(--os-surface-raised);
-  color: var(--os-text);
+  background: #12151b !important;
+  background-color: #12151b !important;
+  color: #f5f7fa !important;
+  color-scheme: dark !important;
 }
 select option:checked,
-select option:hover {
-  background-color: var(--os-surface-active);
-  color: var(--os-text);
+select option:hover,
+select option:focus {
+  background: #1b1e26 !important;
+  background-color: #1b1e26 !important;
+  color: #ffffff !important;
 }
 input::placeholder, textarea::placeholder { color: var(--os-text-muted); }
 ::selection { background: rgba(139, 124, 255, 0.35); color: #ffffff; }
