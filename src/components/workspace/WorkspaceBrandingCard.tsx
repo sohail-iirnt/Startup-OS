@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { CheckCircle2, Palette, Save } from 'lucide-react'
 
 import Button from '../ui/Button'
@@ -12,32 +12,21 @@ const DEFAULT_PORTAL_SUBTITLE = 'Founder Command Center'
 
 function WorkspaceBrandingCard() {
   const { workspace, member } = useWorkspace()
-  const [portalName, setPortalName] = useState(DEFAULT_PORTAL_NAME)
-  const [portalSubtitle, setPortalSubtitle] = useState(DEFAULT_PORTAL_SUBTITLE)
-  const [editing, setEditing] = useState(false)
+  const [portalName, setPortalName] = useState(() => workspace?.portalName?.trim() || DEFAULT_PORTAL_NAME)
+  const [portalSubtitle, setPortalSubtitle] = useState(() => workspace?.portalSubtitle?.trim() || DEFAULT_PORTAL_SUBTITLE)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
 
   const canManage = member?.role === 'owner' || member?.role === 'admin'
 
-  // Sync Firestore branding into the form only while the user is not editing.
-  // This prevents a live listener update from overwriting text the admin is typing.
-  useEffect(() => {
-    if (editing) return
-    setPortalName(workspace?.portalName?.trim() || DEFAULT_PORTAL_NAME)
-    setPortalSubtitle(workspace?.portalSubtitle?.trim() || DEFAULT_PORTAL_SUBTITLE)
-  }, [workspace?.portalName, workspace?.portalSubtitle, editing])
-
   function changePortalName(value: string) {
-    setEditing(true)
     setSaved(false)
     setError('')
     setPortalName(value)
   }
 
   function changePortalSubtitle(value: string) {
-    setEditing(true)
     setSaved(false)
     setError('')
     setPortalSubtitle(value)
@@ -63,7 +52,6 @@ function WorkspaceBrandingCard() {
 
     try {
       await updateWorkspaceBranding(workspace.id, nextName, nextSubtitle)
-      setEditing(false)
       setSaved(true)
       window.setTimeout(() => setSaved(false), 2200)
     } catch (saveError) {
