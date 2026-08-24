@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Check, ShieldCheck, UserRound, X } from 'lucide-react'
 
 import Button from '../components/ui/Button'
@@ -18,7 +18,7 @@ function MemberApprovals() {
 
   const canApprove = hasPermission('members.approve')
 
-  async function loadPending() {
+  const loadPending = useCallback(async () => {
     if (!workspace?.id || !canApprove) {
       setMembers([])
       setLoading(false)
@@ -31,18 +31,31 @@ function MemberApprovals() {
       const result = await getPendingMembers(workspace.id)
       setMembers(result)
       setRoles(
-        Object.fromEntries(result.map((member) => [member.id, member.role === 'intern' || member.role === 'member' || member.role === 'viewer' ? member.role : 'intern'])),
+        Object.fromEntries(
+          result.map((member) => [
+            member.id,
+            member.role === 'intern' || member.role === 'member' || member.role === 'viewer'
+              ? member.role
+              : 'intern',
+          ]),
+        ),
       )
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load pending members.')
     } finally {
       setLoading(false)
     }
-  }
+  }, [workspace?.id, canApprove])
 
   useEffect(() => {
-    void loadPending()
-  }, [workspace?.id, canApprove])
+    const task = queueMicrotask(() => {
+      void loadPending()
+    })
+
+    return () => {
+      void task
+    }
+  }, [loadPending])
 
   async function handleApprove(member: WorkspaceMember) {
     if (!workspace?.id || savingId) return
