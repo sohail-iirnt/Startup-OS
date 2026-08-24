@@ -6,9 +6,7 @@ service cloud.firestore {
     function memberPath(workspaceId, userId) { return /databases/$(database)/documents/workspaces/$(workspaceId)/members/$(userId); }
     function hasActiveMembership(workspaceId) { return signedIn() && exists(memberPath(workspaceId, request.auth.uid)) && get(memberPath(workspaceId, request.auth.uid)).data.status == 'active'; }
     function userRole(workspaceId) { return get(memberPath(workspaceId, request.auth.uid)).data.role; }
-    function normalizedRole(workspaceId) {
-      return userRole(workspaceId) == 'Owner' ? 'owner' : userRole(workspaceId) == 'Admin' ? 'admin' : userRole(workspaceId) == 'administrator' ? 'admin' : userRole(workspaceId) == 'Administrator' ? 'admin' : userRole(workspaceId) == 'Manager' ? 'manager' : userRole(workspaceId) == 'Member' ? 'member' : userRole(workspaceId) == 'Intern' ? 'intern' : userRole(workspaceId) == 'Viewer' ? 'viewer' : userRole(workspaceId);
-    }
+    function normalizedRole(workspaceId) { return userRole(workspaceId) == 'Owner' ? 'owner' : userRole(workspaceId) == 'Admin' ? 'admin' : userRole(workspaceId) == 'administrator' ? 'admin' : userRole(workspaceId) == 'Administrator' ? 'admin' : userRole(workspaceId) == 'Manager' ? 'manager' : userRole(workspaceId) == 'Member' ? 'member' : userRole(workspaceId) == 'Intern' ? 'intern' : userRole(workspaceId) == 'Viewer' ? 'viewer' : userRole(workspaceId); }
     function hasRole(workspaceId, role) { return hasActiveMembership(workspaceId) && normalizedRole(workspaceId) == role; }
     function hasAnyRole(workspaceId, roles) { return hasActiveMembership(workspaceId) && normalizedRole(workspaceId) in roles; }
     function isOwner(workspaceId) { return hasRole(workspaceId, 'owner'); }
@@ -44,7 +42,7 @@ service cloud.firestore {
         (permission == 'documents.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
         (permission == 'documents.manage' && normalizedRole(workspaceId) in ['manager','member','intern']) ||
         (permission == 'goals.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
-        (permission == 'goals.manage' && normalizedRole(workspaceId) in ['manager','member','intern']) ||
+        (permission == 'goals.manage' && normalizedRole(workspaceId) == 'manager') ||
         (permission == 'analytics.view' && normalizedRole(workspaceId) in ['manager','member','viewer']) ||
         (!(permission in ['members.manage', 'access.manage', 'settings.manage']) && get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions)
       ) && !(isWorkspaceAdmin(workspaceId) == false && get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions);
