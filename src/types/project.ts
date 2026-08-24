@@ -3,11 +3,13 @@ import type { BaseEntity } from './common'
 export type ProjectType = 'website' | 'web-app' | 'mobile-app' | 'branding' | 'software' | 'other'
 export type ProjectStatus = 'planning' | 'in-development' | 'on-hold' | 'testing' | 'completed' | 'cancelled'
 export type ProjectPriority = 'low' | 'medium' | 'high' | 'urgent'
+export type ProjectScope = 'internal' | 'external'
 
 export type Project = BaseEntity & {
   name: string
   clientId: string
   clientName: string
+  scope: ProjectScope
   ownerId: string
   ownerName: string
   memberIds: string[]
@@ -26,6 +28,7 @@ export type CreateProjectInput = {
   name: string
   clientId: string
   clientName: string
+  scope: ProjectScope
   ownerId: string
   ownerName: string
   memberIds: string[]
