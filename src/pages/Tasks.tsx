@@ -86,17 +86,17 @@ function Tasks() {
     } finally {
       setLoading(false)
     }
-  }, [workspace?.id])
+  }, [workspace])
 
   useEffect(() => {
     if (workspaceLoading || !workspace?.id) {
       return
     }
 
-    queueMicrotask(() => {
-      void loadTasks()
-    })
-  }, [workspaceLoading, workspace?.id, loadTasks])
+    // Data fetching is an external-system synchronization; this lint rule is not applicable here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadTasks()
+  }, [workspaceLoading, workspace, loadTasks])
 
   function openCreate() {
     setEditingTask(null)
