@@ -16,6 +16,7 @@ import Projects from '../pages/Projects'
 import ProjectDetails from '../pages/ProjectDetails'
 import Tasks from '../pages/Tasks'
 import Team from '../pages/Team'
+import Invitations from '../pages/Invitations'
 import MemberApprovals from '../pages/MemberApprovals'
 import WorkspaceSettings from '../pages/WorkspaceSettings'
 
@@ -33,48 +34,38 @@ function AppRoutes() {
           <Route element={<ProtectedRoute requiredPermission="workspace.view" />}>
             <Route path="/" element={<Dashboard />} />
           </Route>
-
           <Route element={<ProtectedRoute requiredPermission="clients.view" />}>
             <Route path="/clients" element={<Clients />} />
             <Route path="/clients/:clientId" element={<ClientDetails />} />
           </Route>
-
           <Route element={<ProtectedRoute requiredPermission="projects.view" />}>
             <Route path="/projects" element={<Projects />} />
             <Route path="/projects/:projectId" element={<ProjectDetails />} />
           </Route>
-
           <Route element={<ProtectedRoute requiredPermission="websites.view" />}>
             <Route path="/websites" element={<Websites />} />
             <Route path="/websites/:websiteId" element={<WebsiteDetails />} />
           </Route>
-
           <Route element={<ProtectedRoute requiredPermission="tasks.view" />}>
             <Route path="/tasks" element={<Tasks />} />
           </Route>
-
           <Route element={<ProtectedRoute requiredPermission="members.view" />}>
             <Route path="/team" element={<Team />} />
           </Route>
-
           <Route element={<ProtectedRoute requiredPermission="members.approve" />}>
+            <Route path="/team/invitations" element={<Invitations />} />
             <Route path="/team/approvals" element={<MemberApprovals />} />
           </Route>
-
           <Route path="/calendar" element={<PlaceholderPage title="Calendar" description="Centralize meetings, deadlines, events, and important business dates." />} />
-
           <Route element={<ProtectedRoute requiredPermission="finance.view" />}>
             <Route path="/finance" element={<PlaceholderPage title="Finance" description="Track revenue, expenses, transactions, financial health, and reporting." />} />
           </Route>
-
           <Route path="/ideas" element={<PlaceholderPage title="Ideas" description="Capture, organize, evaluate, and develop ideas without losing them." />} />
           <Route path="/documents" element={<PlaceholderPage title="Documents" description="Organize important business documents and knowledge." />} />
           <Route path="/analytics" element={<PlaceholderPage title="Analytics" description="Turn business activity into useful insights and decision-making signals." />} />
-
           <Route element={<ProtectedRoute requiredPermission="settings.manage" />}>
             <Route path="/settings" element={<WorkspaceSettings />} />
           </Route>
-
           <Route path="/auth-test" element={<AuthTest />} />
         </Route>
       </Route>
