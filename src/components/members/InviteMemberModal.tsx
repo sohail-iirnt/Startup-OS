@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react'
-import { Check, Copy, Link2, Mail, UserPlus, X } from 'lucide-react'
+import { useState } from 'react'
+import { Check, Copy, Link2, Loader2, Mail, UserPlus, X } from 'lucide-react'
 
 import Button from '../ui/Button'
 import type { UserRole } from '../../types/common'
+import { createWorkspaceInvitation } from '../../services/invitationService'
 
 type InviteMemberModalProps = {
   open: boolean
@@ -43,38 +44,53 @@ function InviteMemberModal({
   const [role, setRole] = useState<UserRole>('intern')
   const [email, setEmail] = useState('')
   const [copied, setCopied] = useState(false)
-
-  const inviteUrl = useMemo(() => {
-    if (!workspaceId || typeof window === 'undefined') {
-      return ''
-    }
-
-    const url = new URL('/register', window.location.origin)
-    url.searchParams.set('workspaceId', workspaceId)
-    url.searchParams.set('role', role)
-
-    if (email.trim()) {
-      url.searchParams.set('email', email.trim())
-    }
-
-    return url.toString()
-  }, [email, role, workspaceId])
+  const [creating, setCreating] = useState(false)
+  const [error, setError] = useState('')
+  const [inviteUrl, setInviteUrl] = useState('')
 
   if (!open) {
     return null
   }
 
   async function copyInvite() {
-    if (!inviteUrl) {
+    if (!workspaceId || creating) {
       return
     }
 
+    setCreating(true)
+    setError('')
+    setCopied(false)
+
     try {
-      await navigator.clipboard.writeText(inviteUrl)
+      const invitation = await createWorkspaceInvitation(
+        workspaceId,
+        role,
+        email,
+      )
+
+      const url = new URL('/register', window.location.origin)
+      url.searchParams.set('workspaceId', workspaceId)
+      url.searchParams.set('role', role)
+      url.searchParams.set('inviteId', invitation.id)
+      url.searchParams.set('token', invitation.token)
+
+      if (email.trim()) {
+        url.searchParams.set('email', email.trim())
+      }
+
+      const generatedUrl = url.toString()
+      await navigator.clipboard.writeText(generatedUrl)
+      setInviteUrl(generatedUrl)
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1800)
-    } catch {
-      setCopied(false)
+    } catch (inviteError: unknown) {
+      setError(
+        inviteError instanceof Error
+          ? inviteError.message
+          : 'Unable to create the invitation. Please try again.',
+      )
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -82,6 +98,9 @@ function InviteMemberModal({
     setEmail('')
     setRole('intern')
     setCopied(false)
+    setCreating(false)
+    setError('')
+    setInviteUrl('')
     onClose()
   }
 
@@ -110,7 +129,7 @@ function InviteMemberModal({
                 Invite a member
               </h2>
               <p className="mt-1 text-xs text-[var(--os-text-secondary)]">
-                Generate a secure workspace registration link for {workspaceName}.
+                Create a tracked workspace invitation for {workspaceName}.
               </p>
             </div>
           </div>
@@ -142,7 +161,7 @@ function InviteMemberModal({
               />
             </div>
             <p className="mt-2 text-xs text-[var(--os-text-muted)]">
-              If provided, the email will be pre-filled during registration. It does not bypass workspace approval.
+              If provided, the email is carried into the invitation and pre-filled during registration.
             </p>
           </div>
 
@@ -153,8 +172,13 @@ function InviteMemberModal({
             <select
               id="invite-role"
               value={role}
-              onChange={(event) => setRole(event.target.value as UserRole)}
+              onChange={(event) => {
+                setRole(event.target.value as UserRole)
+                setInviteUrl('')
+                setCopied(false)
+              }}
               className="os-focus-ring h-11 w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 text-sm text-[var(--os-text)]"
+              disabled={creating}
             >
               {roleOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -173,22 +197,31 @@ function InviteMemberModal({
               <p className="text-xs font-semibold text-[var(--os-text)]">Workspace invitation link</p>
             </div>
             <p className="mt-2 break-all rounded-lg bg-[var(--os-surface-hover)] p-3 text-xs leading-5 text-[var(--os-text-secondary)]">
-              {inviteUrl}
+              {inviteUrl || 'A tracked invitation link will be generated when you create the invitation.'}
             </p>
           </div>
 
+          {error && (
+            <div
+              role="alert"
+              className="rounded-xl border border-[rgba(255,100,124,0.25)] bg-[rgba(255,100,124,0.08)] px-4 py-3 text-xs leading-5 text-[var(--os-danger)]"
+            >
+              {error}
+            </div>
+          )}
+
           <div className="rounded-xl border border-[rgba(90,169,255,0.18)] bg-[rgba(90,169,255,0.06)] px-4 py-3 text-xs leading-5 text-[var(--os-text-secondary)]">
-            The link identifies this workspace and suggested role. The new member must still create an account and wait for an authorized workspace approver to activate the membership.
+            Invitations are stored in the workspace with a 7-day expiry. The new member must still create an account and wait for an authorized workspace approver to activate the membership.
           </div>
         </div>
 
         <div className="flex flex-col-reverse gap-2 border-t border-[var(--os-border)] px-5 py-4 sm:flex-row sm:justify-end sm:px-6">
-          <Button type="button" variant="secondary" onClick={close}>
+          <Button type="button" variant="secondary" onClick={close} disabled={creating}>
             Close
           </Button>
-          <Button type="button" onClick={() => void copyInvite()} disabled={!inviteUrl}>
-            {copied ? <Check size={15} /> : <Copy size={15} />}
-            {copied ? 'Copied' : 'Copy invitation link'}
+          <Button type="button" onClick={() => void copyInvite()} disabled={creating || !workspaceId}>
+            {creating ? <Loader2 size={15} className="animate-spin" /> : copied ? <Check size={15} /> : <Copy size={15} />}
+            {creating ? 'Creating invitation...' : copied ? 'Copied' : 'Create & copy invitation'}
           </Button>
         </div>
       </div>
