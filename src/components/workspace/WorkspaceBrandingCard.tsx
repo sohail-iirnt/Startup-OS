@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { CheckCircle2, Palette, Save } from 'lucide-react'
 
 import Button from '../ui/Button'
@@ -9,20 +9,13 @@ import { updateWorkspaceBranding } from '../../services/workspaceService'
 
 function WorkspaceBrandingCard() {
   const { workspace, member } = useWorkspace()
-  const [portalName, setPortalName] = useState('')
-  const [portalSubtitle, setPortalSubtitle] = useState('')
+  const [portalName, setPortalName] = useState(workspace?.portalName?.trim() || 'Startup OS')
+  const [portalSubtitle, setPortalSubtitle] = useState(workspace?.portalSubtitle?.trim() || 'Founder Command Center')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
 
   const canManage = member?.role === 'owner' || member?.role === 'admin'
-
-  useEffect(() => {
-    setPortalName(workspace?.portalName?.trim() || 'Startup OS')
-    setPortalSubtitle(workspace?.portalSubtitle?.trim() || 'Founder Command Center')
-    setSaved(false)
-    setError('')
-  }, [workspace?.id, workspace?.portalName, workspace?.portalSubtitle])
 
   async function handleSave() {
     if (!workspace?.id || !canManage || saving) return
