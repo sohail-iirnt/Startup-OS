@@ -5,13 +5,18 @@ service cloud.firestore {
     function signedIn() { return request.auth != null; }
     function memberPath(workspaceId, userId) { return /databases/$(database)/documents/workspaces/$(workspaceId)/members/$(userId); }
     function hasActiveMembership(workspaceId) { return signedIn() && exists(memberPath(workspaceId, request.auth.uid)) && get(memberPath(workspaceId, request.auth.uid)).data.status == 'active'; }
-    function hasRole(workspaceId, role) { return hasActiveMembership(workspaceId) && get(memberPath(workspaceId, request.auth.uid)).data.role == role; }
+    function userRole(workspaceId) { return get(memberPath(workspaceId, request.auth.uid)).data.role; }
+    function hasRole(workspaceId, role) { return hasActiveMembership(workspaceId) && userRole(workspaceId) == role; }
+    function hasAnyRole(workspaceId, roles) { return hasActiveMembership(workspaceId) && userRole(workspaceId) in roles; }
     function isOwner(workspaceId) { return hasRole(workspaceId, 'owner'); }
     function isAdmin(workspaceId) { return hasRole(workspaceId, 'admin'); }
-    function isManager(workspaceId) { return hasRole(workspaceId, 'manager'); }
-    function canApproveMembers(workspaceId) { return isOwner(workspaceId) || isAdmin(workspaceId) || isManager(workspaceId); }
-    function canManage(workspaceId) { return isOwner(workspaceId) || isAdmin(workspaceId); }
-    function canOperate(workspaceId) { return isOwner(workspaceId) || isAdmin(workspaceId) || isManager(workspaceId); }
+    function canApproveMembers(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin', 'manager']); }
+    function canManage(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin']); }
+    function canOperate(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin', 'manager']); }
+    function canManageTasks(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin', 'manager']); }
+    function canCreateTasks(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin', 'manager', 'member']); }
+    function canUpdateOwnTask(workspaceId, taskId) { return hasActiveMembership(workspaceId) && userRole(workspaceId) in ['member', 'intern'] && get(/databases/$(database)/documents/tasks/$(taskId)).data.assigneeId == request.auth.uid; }
+    function canUpdateOwnProject(workspaceId, projectId) { return hasActiveMembership(workspaceId) && userRole(workspaceId) in ['member', 'intern'] && get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid; }
 
     match /users/{userId} {
       allow read: if signedIn();
@@ -20,7 +25,7 @@ service cloud.firestore {
     }
 
     match /workspaces/{workspaceId} {
-      allow read: if signedIn();
+      allow read: if hasActiveMembership(workspaceId) || (signedIn() && resource.data.ownerId == request.auth.uid);
       allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
       allow update: if canManage(workspaceId);
       allow delete: if false;
@@ -43,7 +48,7 @@ service cloud.firestore {
 
     match /financeEntries/{entryId} {
       allow create: if signedIn() && request.resource.data.workspaceId is string && canManage(request.resource.data.workspaceId) && request.resource.data.createdBy == request.auth.uid && request.resource.data.type in ['income', 'expense'] && request.resource.data.amount > 0;
-      allow read: if hasActiveMembership(resource.data.workspaceId);
+      allow read: if hasAnyRole(resource.data.workspaceId, ['owner', 'admin']);
       allow update: if canManage(resource.data.workspaceId) && resource.data.workspaceId == request.resource.data.workspaceId;
       allow delete: if canManage(resource.data.workspaceId);
     }
@@ -57,30 +62,30 @@ service cloud.firestore {
 
     match /websites/{websiteId} {
       allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && canOperate(request.resource.data.workspaceId);
-      allow read: if hasActiveMembership(resource.data.workspaceId);
+      allow read: if hasAnyRole(resource.data.workspaceId, ['owner', 'admin', 'manager', 'member', 'viewer']);
       allow update: if canOperate(resource.data.workspaceId) && resource.data.workspaceId == request.resource.data.workspaceId;
       allow delete: if canManage(resource.data.workspaceId);
     }
 
     match /clients/{clientId} {
       allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && canOperate(request.resource.data.workspaceId);
-      allow read: if hasActiveMembership(resource.data.workspaceId);
+      allow read: if hasAnyRole(resource.data.workspaceId, ['owner', 'admin', 'manager', 'member', 'viewer']);
       allow update: if canOperate(resource.data.workspaceId) && resource.data.workspaceId == request.resource.data.workspaceId;
       allow delete: if canManage(resource.data.workspaceId);
     }
 
     match /projects/{projectId} {
       allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && canOperate(request.resource.data.workspaceId);
-      allow read: if hasActiveMembership(resource.data.workspaceId) && (get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role != 'intern' || resource.data.ownerId == request.auth.uid);
-      allow update: if resource.data.workspaceId == request.resource.data.workspaceId && (canOperate(resource.data.workspaceId) || (hasActiveMembership(resource.data.workspaceId) && get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role in ['member', 'intern'] && resource.data.ownerId == request.auth.uid && request.resource.data.ownerId == resource.data.ownerId));
+      allow read: if hasAnyRole(resource.data.workspaceId, ['owner', 'admin', 'manager', 'member', 'viewer']) || (hasRole(resource.data.workspaceId, 'intern') && resource.data.ownerId == request.auth.uid);
+      allow update: if resource.data.workspaceId == request.resource.data.workspaceId && (canOperate(resource.data.workspaceId) || canUpdateOwnProject(resource.data.workspaceId, projectId));
       allow delete: if canManage(resource.data.workspaceId);
     }
 
     match /tasks/{taskId} {
-      allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && request.resource.data.createdBy == request.auth.uid && canOperate(request.resource.data.workspaceId);
-      allow read: if hasActiveMembership(resource.data.workspaceId) && (get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role != 'intern' || resource.data.assigneeId == request.auth.uid);
-      allow update: if resource.data.workspaceId == request.resource.data.workspaceId && (canOperate(resource.data.workspaceId) || (hasActiveMembership(resource.data.workspaceId) && get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role in ['member', 'intern'] && resource.data.assigneeId == request.auth.uid && request.resource.data.assigneeId == resource.data.assigneeId));
-      allow delete: if canOperate(resource.data.workspaceId);
+      allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && request.resource.data.createdBy == request.auth.uid && canCreateTasks(request.resource.data.workspaceId);
+      allow read: if hasAnyRole(resource.data.workspaceId, ['owner', 'admin', 'manager', 'member', 'viewer']) || (hasRole(resource.data.workspaceId, 'intern') && resource.data.assigneeId == request.auth.uid);
+      allow update: if resource.data.workspaceId == request.resource.data.workspaceId && (canManageTasks(resource.data.workspaceId) || canUpdateOwnTask(resource.data.workspaceId, taskId));
+      allow delete: if canManageTasks(resource.data.workspaceId);
     }
 
     match /{document=**} { allow read, write: if false; }
