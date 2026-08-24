@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useAuth } from './useAuth'
 import { WorkspaceContext, type WorkspaceContextValue } from './WorkspaceContext'
-import { getWorkspace, getWorkspaceMember, initializeDefaultWorkspace, subscribeToWorkspaceMember } from '../services/workspaceService'
+import { getWorkspace, getWorkspaceMember, initializeDefaultWorkspace, subscribeToWorkspace, subscribeToWorkspaceMember } from '../services/workspaceService'
 import { memberHasPermission } from '../types/permissions'
 import type { WorkspaceMember } from '../types/workspace'
 
@@ -43,6 +43,13 @@ export function WorkspaceProvider({ children }: WorkspaceProviderProps) {
     void initializeWorkspace()
     return () => { cancelled = true }
   }, [authLoading, user, loadWorkspace])
+
+  useEffect(() => {
+    if (!workspace?.id) return undefined
+    return subscribeToWorkspace(workspace.id, (nextWorkspace) => {
+      setWorkspace(nextWorkspace)
+    }, (error) => console.error('Workspace listener failed:', error))
+  }, [workspace?.id])
 
   useEffect(() => {
     if (!workspace?.id || !user?.uid || member?.status !== 'active') return undefined
