@@ -69,7 +69,7 @@ function Dashboard() {
     }
 
     const projectQuery = isIntern
-      ? query(collection(db, 'projects'), where('workspaceId', '==', workspaceId), where('ownerId', '==', userId))
+      ? query(collection(db, 'projects'), where('workspaceId', '==', workspaceId), where('memberIds', 'array-contains', userId))
       : query(collection(db, 'projects'), where('workspaceId', '==', workspaceId))
     const taskQuery = isIntern
       ? query(collection(db, 'tasks'), where('workspaceId', '==', workspaceId), where('assigneeId', '==', userId))
@@ -81,44 +81,34 @@ function Dashboard() {
       unsubscribers.push(onSnapshot(projectQuery, (snapshot) => {
         setProjects(snapshot.docs.map((item) => { const data = item.data(); return { id: item.id, name: String(data.name ?? ''), status: String(data.status ?? 'planning'), projectValue: Number(data.projectValue ?? 0), deadline: toDate(data.deadline) } }))
       }, handleError))
-    } else {
-      setProjects([])
     }
 
     if (tasksVisible) {
       unsubscribers.push(onSnapshot(taskQuery, (snapshot) => {
         setTasks(snapshot.docs.map((item) => { const data = item.data(); return { id: item.id, title: String(data.title ?? ''), status: String(data.status ?? 'todo'), priority: String(data.priority ?? 'medium'), dueDate: toDate(data.dueDate) } }).filter((task) => !task.status.includes('cancelled')))
       }, handleError))
-    } else {
-      setTasks([])
     }
 
     if (clientsVisible && !isIntern) {
       unsubscribers.push(onSnapshot(query(collection(db, 'clients'), where('workspaceId', '==', workspaceId)), (snapshot) => setClientCount(snapshot.size), handleError))
-    } else {
-      setClientCount(0)
     }
 
     if (websitesVisible && !isIntern) {
       unsubscribers.push(onSnapshot(query(collection(db, 'websites'), where('workspaceId', '==', workspaceId)), (snapshot) => {
         setWebsites(snapshot.docs.map((item) => { const data = item.data(); return { id: item.id, name: String(data.name ?? ''), status: String(data.status ?? 'testing') } }))
       }, handleError))
-    } else {
-      setWebsites([])
     }
 
     if (financeVisible && !isIntern) {
       unsubscribers.push(onSnapshot(query(collection(db, 'financeEntries'), where('workspaceId', '==', workspaceId)), (snapshot) => {
         setRevenue(snapshot.docs.reduce((total, item) => { const data = item.data(); return data.type === 'income' ? total + Number(data.amount ?? 0) : total }, 0))
       }, handleError))
-    } else {
-      setRevenue(0)
     }
 
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe())
   }, [workspace?.id, workspaceLoading, user?.uid, isIntern, projectsVisible, tasksVisible, clientsVisible, websitesVisible, financeVisible])
 
-  const dashboardLoading = workspaceLoading || projects === null || tasks === null || (clientsVisible && !isIntern && clientCount === null) || (websitesVisible && !isIntern && websites === null) || (financeVisible && !isIntern && revenue === null)
+  const dashboardLoading = workspaceLoading || (projectsVisible && projects === null) || (tasksVisible && tasks === null) || (clientsVisible && !isIntern && clientCount === null) || (websitesVisible && !isIntern && websites === null) || (financeVisible && !isIntern && revenue === null)
   const activeProjects = useMemo(() => (projects ?? []).filter((project) => project.status !== 'completed' && project.status !== 'cancelled'), [projects])
   const pendingTasks = useMemo(() => (tasks ?? []).filter((task) => task.status !== 'completed' && task.status !== 'cancelled').sort((a, b) => { if (!a.dueDate && !b.dueDate) return 0; if (!a.dueDate) return 1; if (!b.dueDate) return -1; return a.dueDate.getTime() - b.dueDate.getTime() }), [tasks])
   const totalProjectValue = useMemo(() => (projects ?? []).reduce((total, project) => total + project.projectValue, 0), [projects])
