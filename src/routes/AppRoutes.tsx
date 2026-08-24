@@ -30,22 +30,51 @@ function AppRoutes() {
       </Route>
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/clients" element={<Clients />} />
-          <Route path="/clients/:clientId" element={<ClientDetails />} />
-          <Route path="/projects" element={<Projects />} />
-          <Route path="/projects/:projectId" element={<ProjectDetails />} />
-          <Route path="/websites" element={<Websites />} />
-          <Route path="/websites/:websiteId" element={<WebsiteDetails />} />
-          <Route path="/tasks" element={<Tasks />} />
-          <Route path="/team" element={<Team />} />
-          <Route path="/team/approvals" element={<MemberApprovals />} />
+          <Route element={<ProtectedRoute requiredPermission="workspace.view" />}>
+            <Route path="/" element={<Dashboard />} />
+          </Route>
+
+          <Route element={<ProtectedRoute requiredPermission="clients.view" />}>
+            <Route path="/clients" element={<Clients />} />
+            <Route path="/clients/:clientId" element={<ClientDetails />} />
+          </Route>
+
+          <Route element={<ProtectedRoute requiredPermission="projects.view" />}>
+            <Route path="/projects" element={<Projects />} />
+            <Route path="/projects/:projectId" element={<ProjectDetails />} />
+          </Route>
+
+          <Route element={<ProtectedRoute requiredPermission="websites.view" />}>
+            <Route path="/websites" element={<Websites />} />
+            <Route path="/websites/:websiteId" element={<WebsiteDetails />} />
+          </Route>
+
+          <Route element={<ProtectedRoute requiredPermission="tasks.view" />}>
+            <Route path="/tasks" element={<Tasks />} />
+          </Route>
+
+          <Route element={<ProtectedRoute requiredPermission="members.view" />}>
+            <Route path="/team" element={<Team />} />
+          </Route>
+
+          <Route element={<ProtectedRoute requiredPermission="members.approve" />}>
+            <Route path="/team/approvals" element={<MemberApprovals />} />
+          </Route>
+
           <Route path="/calendar" element={<PlaceholderPage title="Calendar" description="Centralize meetings, deadlines, events, and important business dates." />} />
-          <Route path="/finance" element={<PlaceholderPage title="Finance" description="Track revenue, expenses, transactions, financial health, and reporting." />} />
+
+          <Route element={<ProtectedRoute requiredPermission="finance.view" />}>
+            <Route path="/finance" element={<PlaceholderPage title="Finance" description="Track revenue, expenses, transactions, financial health, and reporting." />} />
+          </Route>
+
           <Route path="/ideas" element={<PlaceholderPage title="Ideas" description="Capture, organize, evaluate, and develop ideas without losing them." />} />
           <Route path="/documents" element={<PlaceholderPage title="Documents" description="Organize important business documents and knowledge." />} />
           <Route path="/analytics" element={<PlaceholderPage title="Analytics" description="Turn business activity into useful insights and decision-making signals." />} />
-          <Route path="/settings" element={<WorkspaceSettings />} />
+
+          <Route element={<ProtectedRoute requiredPermission="settings.manage" />}>
+            <Route path="/settings" element={<WorkspaceSettings />} />
+          </Route>
+
           <Route path="/auth-test" element={<AuthTest />} />
         </Route>
       </Route>
