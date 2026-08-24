@@ -49,6 +49,6 @@ export const navigationSections: NavigationSection[] = [
   { label: 'Insights', items: [{ label: 'Analytics', path: '/analytics', icon: BarChart3, permission: 'analytics.view' }] },
   { label: 'System', items: [
     { label: 'Settings', path: '/settings', icon: Settings, permission: 'settings.manage' },
-    { label: 'Roles & Permissions', path: '/settings/access-control', icon: ShieldCheck, permission: 'settings.manage' },
+    { label: 'Roles & Permissions', path: '/settings/access-control', icon: ShieldCheck, permission: 'access.manage' },
   ] },
 ]
