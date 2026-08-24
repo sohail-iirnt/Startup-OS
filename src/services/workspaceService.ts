@@ -4,6 +4,7 @@ import type { User } from 'firebase/auth'
 import { db } from '../lib/firebase'
 import type { Workspace, WorkspaceMember } from '../types/workspace'
 import type { UserRole } from '../types/common'
+import type { WorkspacePermission } from '../types/permissions'
 import { getUserProfile, setDefaultWorkspace } from './userService'
 
 const WORKSPACES_COLLECTION = 'workspaces'
@@ -38,6 +39,15 @@ export async function getWorkspaceMember(workspaceId: string, userId: string): P
   return { id: snapshot.id, ...snapshot.data() } as WorkspaceMember
 }
 
+export async function getWorkspaceMemberDetails(workspaceId: string, userId: string): Promise<WorkspaceMember | null> {
+  return getWorkspaceMember(workspaceId, userId)
+}
+
+export async function getWorkspaceMembers(workspaceId: string): Promise<WorkspaceMember[]> {
+  const snapshot = await getDocs(collection(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION))
+  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as WorkspaceMember).filter((member) => member.status === 'active')
+}
+
 export function subscribeToWorkspaceMember(workspaceId: string, userId: string, onChange: (member: WorkspaceMember | null) => void, onError?: (error: Error) => void): Unsubscribe {
   const memberRef = doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId)
   return onSnapshot(memberRef, (snapshot) => {
@@ -45,11 +55,28 @@ export function subscribeToWorkspaceMember(workspaceId: string, userId: string, 
   }, (error) => onError?.(error instanceof Error ? error : new Error('Unable to listen for workspace membership updates.')))
 }
 
+export function subscribeToWorkspaceMembers(workspaceId: string, onChange: (members: WorkspaceMember[]) => void, onError?: (error: Error) => void): Unsubscribe {
+  const membersRef = collection(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION)
+  return onSnapshot(membersRef, (snapshot) => {
+    onChange(snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as WorkspaceMember).filter((member) => member.status === 'active'))
+  }, (error) => onError?.(error instanceof Error ? error : new Error('Unable to listen for workspace member updates.')))
+}
+
 export async function setWorkspaceMember(workspaceId: string, userId: string, role: UserRole = 'member', user?: User, status: WorkspaceMember['status'] = 'active'): Promise<void> {
   const memberRef = doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId)
   const existingSnapshot = await getDoc(memberRef)
   if (existingSnapshot.exists()) return
-  await setDoc(memberRef, { id: userId, workspaceId, userId, role, status, displayName: user?.displayName || user?.email?.split('@')[0] || 'Workspace Member', email: user?.email || '', photoURL: user?.photoURL || null, designation: role === 'owner' ? 'Founder' : role, joinedAt: serverTimestamp(), updatedAt: serverTimestamp() })
+  await setDoc(memberRef, { id: userId, workspaceId, userId, role, status, displayName: user?.displayName || user?.email?.split('@')[0] || 'Workspace Member', email: user?.email || '', photoURL: user?.photoURL || null, designation: role === 'owner' ? 'Founder' : role, grantedPermissions: [], deniedPermissions: [], joinedAt: serverTimestamp(), updatedAt: serverTimestamp() })
+}
+
+export async function updateMemberPermissions(workspaceId: string, userId: string, grantedPermissions: WorkspacePermission[], deniedPermissions: WorkspacePermission[]): Promise<void> {
+  const memberRef = doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId)
+  await updateDoc(memberRef, { grantedPermissions, deniedPermissions, updatedAt: serverTimestamp() })
+}
+
+export async function updateMemberRole(workspaceId: string, userId: string, role: UserRole): Promise<void> {
+  const memberRef = doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId)
+  await updateDoc(memberRef, { role, updatedAt: serverTimestamp() })
 }
 
 async function findDefaultWorkspace(): Promise<Workspace | null> {
@@ -95,7 +122,7 @@ export async function requestWorkspaceMembership(workspaceId: string, user: User
     if (existing.status === 'suspended') throw new Error('Your membership in this workspace is suspended.')
     if (existing.status === 'rejected') throw new Error('Your previous request was rejected. Please contact a workspace administrator.')
   }
-  await setDoc(memberRef, { id: user.uid, workspaceId: normalizedWorkspaceId, userId: user.uid, role: requestedRole, status: 'pending', displayName: user.displayName || user.email?.split('@')[0] || 'Workspace Member', email: user.email || '', photoURL: user.photoURL || null, designation: requestedRole, joinedAt: serverTimestamp(), updatedAt: serverTimestamp() })
+  await setDoc(memberRef, { id: user.uid, workspaceId: normalizedWorkspaceId, userId: user.uid, role: requestedRole, status: 'pending', displayName: user.displayName || user.email?.split('@')[0] || 'Workspace Member', email: user.email || '', photoURL: user.photoURL || null, designation: requestedRole, grantedPermissions: [], deniedPermissions: [], joinedAt: serverTimestamp(), updatedAt: serverTimestamp() })
   await setDefaultWorkspace(user.uid, normalizedWorkspaceId)
   const createdSnapshot = await getDoc(memberRef)
   return { id: createdSnapshot.id, ...createdSnapshot.data() } as WorkspaceMember
