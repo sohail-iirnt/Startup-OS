@@ -10,6 +10,8 @@ import { getUserProfile, setDefaultWorkspace } from './userService'
 const WORKSPACES_COLLECTION = 'workspaces'
 const MEMBERS_COLLECTION = 'members'
 const DEFAULT_WORKSPACE_NAME = 'WebAura By III'
+const DEFAULT_PORTAL_NAME = 'Startup OS'
+const DEFAULT_PORTAL_SUBTITLE = 'Founder Command Center'
 
 export async function createWorkspace(userId: string, name: string, description = ''): Promise<Workspace> {
   const normalizedName = name.trim()
@@ -17,7 +19,7 @@ export async function createWorkspace(userId: string, name: string, description 
   const workspacesRef = collection(db, WORKSPACES_COLLECTION)
   const workspaceRef = doc(workspacesRef)
   const workspaceId = workspaceRef.id
-  await setDoc(workspaceRef, { id: workspaceId, name: normalizedName, description: description.trim(), ownerId: userId, workspaceCode: workspaceId, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
+  await setDoc(workspaceRef, { id: workspaceId, name: normalizedName, description: description.trim(), ownerId: userId, workspaceCode: workspaceId, portalName: DEFAULT_PORTAL_NAME, portalSubtitle: DEFAULT_PORTAL_SUBTITLE, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
   await setWorkspaceMember(workspaceId, userId, 'owner')
   await setDefaultWorkspace(userId, workspaceId)
   const createdSnapshot = await getDoc(workspaceRef)
@@ -30,6 +32,22 @@ export async function getWorkspace(workspaceId: string): Promise<Workspace | nul
   const snapshot = await getDoc(workspaceRef)
   if (!snapshot.exists()) return null
   return { id: snapshot.id, ...snapshot.data() } as Workspace
+}
+
+export function subscribeToWorkspace(workspaceId: string, onChange: (workspace: Workspace | null) => void, onError?: (error: Error) => void): Unsubscribe {
+  const workspaceRef = doc(db, WORKSPACES_COLLECTION, workspaceId)
+  return onSnapshot(workspaceRef, (snapshot) => {
+    onChange(snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as Workspace) : null)
+  }, (error) => onError?.(error instanceof Error ? error : new Error('Unable to listen for workspace updates.')))
+}
+
+export async function updateWorkspaceBranding(workspaceId: string, portalName: string, portalSubtitle: string): Promise<void> {
+  const normalizedName = portalName.trim()
+  const normalizedSubtitle = portalSubtitle.trim()
+  if (!normalizedName) throw new Error('Portal name is required.')
+  if (!normalizedSubtitle) throw new Error('Portal subtitle is required.')
+  const workspaceRef = doc(db, WORKSPACES_COLLECTION, workspaceId)
+  await updateDoc(workspaceRef, { portalName: normalizedName, portalSubtitle: normalizedSubtitle, updatedAt: serverTimestamp() })
 }
 
 export async function getWorkspaceMember(workspaceId: string, userId: string): Promise<WorkspaceMember | null> {
