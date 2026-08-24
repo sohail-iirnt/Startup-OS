@@ -45,14 +45,34 @@ service cloud.firestore {
         allow create: if canApproveMembers(workspaceId)
           && request.resource.data.workspaceId == workspaceId
           && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.token == invitationId
           && request.resource.data.role in ['admin', 'manager', 'member', 'intern', 'viewer']
           && request.resource.data.status == 'pending';
 
-        allow read: if canApproveMembers(workspaceId);
+        // A bearer invitation token is the credential for this single-document lookup.
+        // Only the matching token document may be retrieved, and only while it is active.
+        allow get: if resource.data.workspaceId == workspaceId
+          && resource.data.token == invitationId
+          && resource.data.status == 'pending'
+          && resource.data.expiresAt > request.time;
 
-        allow update: if canApproveMembers(workspaceId)
-          && request.resource.data.workspaceId == resource.data.workspaceId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'revokedAt']);
+        allow list: if canApproveMembers(workspaceId);
+
+        allow update: if (
+            canApproveMembers(workspaceId)
+            && request.resource.data.workspaceId == resource.data.workspaceId
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'revokedAt'])
+          ) || (
+            signedIn()
+            && resource.data.workspaceId == workspaceId
+            && resource.data.token == invitationId
+            && resource.data.status == 'pending'
+            && resource.data.expiresAt > request.time
+            && (resource.data.email == null || resource.data.email == request.auth.token.email)
+            && request.resource.data.status == 'accepted'
+            && request.resource.data.acceptedBy == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedBy', 'acceptedAt'])
+          );
 
         allow delete: if false;
       }
@@ -86,7 +106,6 @@ service cloud.firestore {
         && request.resource.data.workspaceId != ''
         && canOperate(request.resource.data.workspaceId);
 
-      // Interns only receive projects explicitly assigned to them through ownerId.
       allow read: if hasActiveMembership(resource.data.workspaceId)
         && (
           get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role != 'intern'
