@@ -29,6 +29,7 @@ function mapProject(id: string, data: DocumentData): Project {
     clientName: data.clientName ?? '',
     ownerId: data.ownerId ?? '',
     ownerName: data.ownerName ?? '',
+    memberIds: Array.isArray(data.memberIds) ? data.memberIds : [],
     type: data.type ?? 'software',
     status: data.status ?? 'planning',
     priority: data.priority ?? 'medium',
@@ -56,6 +57,7 @@ function normalize(input: CreateProjectInput) {
     clientName: input.clientName.trim(),
     ownerId: input.ownerId.trim(),
     ownerName: input.ownerName.trim(),
+    memberIds: Array.from(new Set(input.memberIds.filter(Boolean))),
     description: input.description.trim(),
     notes: input.notes.trim(),
     budget,
@@ -71,7 +73,7 @@ export async function getProjects(workspaceId: string) {
   const member = currentUser ? await getWorkspaceMember(workspaceId, currentUser.uid) : null
   const projectsRef = collection(db, COLLECTION)
   const projectsQuery = member?.role === 'intern'
-    ? query(projectsRef, where('workspaceId', '==', workspaceId), where('ownerId', '==', currentUser?.uid ?? ''))
+    ? query(projectsRef, where('workspaceId', '==', workspaceId), where('memberIds', 'array-contains', currentUser?.uid ?? ''))
     : query(projectsRef, where('workspaceId', '==', workspaceId))
   const snapshot = await getDocs(projectsQuery)
   return snapshot.docs.map((item) => mapProject(item.id, item.data())).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
