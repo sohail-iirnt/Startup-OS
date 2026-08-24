@@ -34,7 +34,9 @@ export function normalizeUserRole(role: unknown): UserRole {
 }
 
 export function roleHasPermission(role: UserRole, permission: WorkspacePermission): boolean {
-  return ROLE_PERMISSIONS[normalizeUserRole(role)].includes(permission)
+  const normalizedRole = normalizeUserRole(role)
+  if (FULL_ACCESS_ROLES.has(normalizedRole)) return true
+  return ROLE_PERMISSIONS[normalizedRole].includes(permission)
 }
 
 export function getRolePermissions(role: UserRole): readonly WorkspacePermission[] {
@@ -63,7 +65,10 @@ export function memberHasPermission(member: WorkspaceMember | null, permission: 
   if (!member || member.status !== 'active') return false
 
   const role = normalizeUserRole(member.role)
-  if (FULL_ACCESS_ROLES.has(role)) return roleHasPermission(role, permission)
+  // Owner/admin are full workspace administrators. Keep this unconditional
+  // so adding a new permission later cannot accidentally lock them out until
+  // ROLE_PERMISSIONS is updated.
+  if (FULL_ACCESS_ROLES.has(role)) return true
   if (ROLE_ONLY_PERMISSIONS.has(permission)) return false
   return getEffectivePermissions(member).includes(permission)
 }
