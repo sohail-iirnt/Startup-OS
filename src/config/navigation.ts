@@ -12,6 +12,7 @@ import {
   Users,
   Globe,
   MailPlus,
+  ShieldCheck,
 } from 'lucide-react'
 import type { WorkspacePermission } from '../types/permissions'
 
@@ -46,5 +47,8 @@ export const navigationSections: NavigationSection[] = [
     { label: 'Documents', path: '/documents', icon: FileText, permission: 'documents.view' },
   ] },
   { label: 'Insights', items: [{ label: 'Analytics', path: '/analytics', icon: BarChart3, permission: 'analytics.view' }] },
-  { label: 'System', items: [{ label: 'Settings', path: '/settings', icon: Settings, permission: 'settings.manage' }] },
+  { label: 'System', items: [
+    { label: 'Settings', path: '/settings', icon: Settings, permission: 'settings.manage' },
+    { label: 'Roles & Permissions', path: '/settings/access-control', icon: ShieldCheck, permission: 'settings.manage' },
+  ] },
 ]
