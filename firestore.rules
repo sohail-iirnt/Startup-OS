@@ -18,16 +18,17 @@ service cloud.firestore {
     function canCreateProjects(workspaceId) { return hasPermission(workspaceId, 'projects.create'); }
 
     // Effective permission = role baseline + explicit grants - explicit denials.
-    // Access-control administration itself remains owner/admin-only so a custom
-    // members.manage grant cannot be used to escalate another member's access.
+    // Access-control administration remains owner/admin-only and is separate from
+    // ordinary member-management permissions so access cannot be escalated.
     function hasPermission(workspaceId, permission) {
       return hasActiveMembership(workspaceId) && (
         (permission == 'workspace.view' && userRole(workspaceId) in ['owner','admin','manager','member','intern','viewer']) ||
         (permission == 'members.view' && userRole(workspaceId) in ['owner','admin','manager','member','intern','viewer']) ||
         (permission == 'members.approve' && userRole(workspaceId) in ['owner','admin','manager']) ||
         (permission == 'members.manage' && userRole(workspaceId) in ['owner','admin']) ||
+        (permission == 'access.manage' && userRole(workspaceId) in ['owner','admin']) ||
         (permission == 'projects.view' && userRole(workspaceId) in ['owner','admin','manager','member','intern','viewer']) ||
-        (permission == 'projects.create' && userRole(workspaceId) in ['owner','admin','manager','member','intern']) ||
+        (permission == 'projects.create' && userRole(workspaceId) in ['owner','admin','manager','intern']) ||
         (permission == 'projects.update' && userRole(workspaceId) in ['owner','admin','manager','member','intern']) ||
         (permission == 'projects.delete' && userRole(workspaceId) in ['owner','admin']) ||
         (permission == 'tasks.view' && userRole(workspaceId) in ['owner','admin','manager','member','intern','viewer']) ||
@@ -46,7 +47,7 @@ service cloud.firestore {
         (permission == 'documents.view' && userRole(workspaceId) in ['owner','admin','manager','member','intern','viewer']) ||
         (permission == 'analytics.view' && userRole(workspaceId) in ['owner','admin','manager','member','viewer']) ||
         (permission == 'settings.manage' && userRole(workspaceId) in ['owner','admin']) ||
-        (!(permission in ['members.manage', 'settings.manage']) && get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions)
+        (!(permission in ['members.manage', 'access.manage', 'settings.manage']) && get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions)
       ) && !(get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions);
     }
 
