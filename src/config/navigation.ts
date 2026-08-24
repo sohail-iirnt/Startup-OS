@@ -13,6 +13,7 @@ import {
   Globe,
   MailPlus,
   ShieldCheck,
+  Target,
 } from 'lucide-react'
 import type { WorkspacePermission } from '../types/permissions'
 
@@ -40,6 +41,7 @@ export const navigationSections: NavigationSection[] = [
     { label: 'Team', path: '/team', icon: Users, permission: 'members.view' },
     { label: 'Invitations', path: '/team/invitations', icon: MailPlus, permission: 'members.approve' },
     { label: 'Calendar', path: '/calendar', icon: CalendarDays, permission: 'calendar.view' },
+    { label: 'Goals & Targets', path: '/goals', icon: Target, permission: 'goals.view' },
   ] },
   { label: 'Finance', items: [{ label: 'Finance', path: '/finance', icon: CircleDollarSign, permission: 'finance.view' }] },
   { label: 'Knowledge', items: [
