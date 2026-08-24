@@ -9,7 +9,7 @@ import type { UserRole } from '../types/common'
 import type { WorkspaceMember } from '../types/workspace'
 
 function MemberApprovals() {
-  const { workspace, loading: workspaceLoading, hasPermission } = useWorkspace()
+  const { workspace, member: currentMember, loading: workspaceLoading, hasPermission } = useWorkspace()
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [roles, setRoles] = useState<Record<string, UserRole>>({})
   const [loading, setLoading] = useState(true)
@@ -17,6 +17,7 @@ function MemberApprovals() {
   const [error, setError] = useState('')
 
   const canApprove = hasPermission('members.approve')
+  const canAssignElevatedRoles = currentMember?.role === 'owner' || currentMember?.role === 'admin'
 
   const loadPending = useCallback(async () => {
     if (!workspace?.id || !canApprove) {
@@ -125,7 +126,16 @@ function MemberApprovals() {
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
-                <div><label htmlFor={`role-${member.id}`} className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-[var(--os-text-muted)]">Final role</label><select id={`role-${member.id}`} value={roles[member.id] ?? 'intern'} onChange={(event) => setRoles((current) => ({ ...current, [member.id]: event.target.value as UserRole }))} disabled={savingId === member.id} className="h-10 w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 text-sm text-[var(--os-text)]"><option value="intern">Intern</option><option value="member">Member</option><option value="viewer">Viewer</option><option value="manager">Manager</option></select></div>
+                <div>
+                  <label htmlFor={`role-${member.id}`} className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-[var(--os-text-muted)]">Final role</label>
+                  <select id={`role-${member.id}`} value={roles[member.id] ?? 'intern'} onChange={(event) => setRoles((current) => ({ ...current, [member.id]: event.target.value as UserRole }))} disabled={savingId === member.id} className="h-10 w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 text-sm text-[var(--os-text)]">
+                    <option value="intern">Intern</option>
+                    <option value="member">Member</option>
+                    <option value="viewer">Viewer</option>
+                    {canAssignElevatedRoles && <><option value="manager">Manager</option></>}
+                  </select>
+                  <p className="mt-2 text-xs leading-5 text-[var(--os-text-muted)]">The selected role becomes this member's effective Startup OS access profile after approval.</p>
+                </div>
                 <Button type="button" onClick={() => void handleApprove(member)} disabled={savingId === member.id}><Check size={15} />{savingId === member.id ? 'Saving...' : 'Approve'}</Button>
                 <Button type="button" variant="secondary" onClick={() => void handleReject(member)} disabled={savingId === member.id}><X size={15} />Reject</Button>
               </div>
