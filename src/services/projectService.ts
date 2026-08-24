@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, query, serverTimestamp, updateDoc, where, type DocumentData } from 'firebase/firestore'
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, onSnapshot, query, serverTimestamp, updateDoc, where, type DocumentData, type Unsubscribe } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
 import type { CreateProjectInput, Project } from '../types/project'
 import { getWorkspaceMember } from './workspaceService'
@@ -27,6 +27,7 @@ function mapProject(id: string, data: DocumentData): Project {
     name: data.name ?? '',
     clientId: data.clientId ?? '',
     clientName: data.clientName ?? '',
+    scope: data.scope === 'external' ? 'external' : 'internal',
     ownerId: data.ownerId ?? '',
     ownerName: data.ownerName ?? '',
     memberIds: Array.isArray(data.memberIds) ? data.memberIds : [],
@@ -47,14 +48,16 @@ function mapProject(id: string, data: DocumentData): Project {
 function normalize(input: CreateProjectInput) {
   const budget = Number(input.budget)
   const projectValue = Number(input.projectValue)
+  const scope = input.scope ?? 'internal'
   if (!input.name.trim()) throw new Error('Project name is required.')
-  if (!input.clientId) throw new Error('Please select a client.')
+  if (scope === 'external' && input.clientId && !input.clientName.trim()) throw new Error('Selected client information is incomplete.')
   if (!Number.isFinite(budget) || budget < 0 || !Number.isFinite(projectValue) || projectValue < 0) throw new Error('Budget and project value cannot be negative.')
   return {
     ...input,
+    scope,
     name: input.name.trim(),
-    clientId: input.clientId.trim(),
-    clientName: input.clientName.trim(),
+    clientId: scope === 'external' ? input.clientId.trim() : '',
+    clientName: scope === 'external' ? input.clientName.trim() : '',
     ownerId: input.ownerId.trim(),
     ownerName: input.ownerName.trim(),
     memberIds: Array.from(new Set(input.memberIds.filter(Boolean))),
@@ -67,16 +70,30 @@ function normalize(input: CreateProjectInput) {
   }
 }
 
+function projectQuery(workspaceId: string, role: string | undefined, uid: string | undefined) {
+  const projectsRef = collection(db, COLLECTION)
+  return role === 'intern'
+    ? query(projectsRef, where('workspaceId', '==', workspaceId), where('memberIds', 'array-contains', uid ?? ''))
+    : query(projectsRef, where('workspaceId', '==', workspaceId))
+}
+
 export async function getProjects(workspaceId: string) {
   if (!workspaceId) return []
   const currentUser = auth.currentUser
   const member = currentUser ? await getWorkspaceMember(workspaceId, currentUser.uid) : null
-  const projectsRef = collection(db, COLLECTION)
-  const projectsQuery = member?.role === 'intern'
-    ? query(projectsRef, where('workspaceId', '==', workspaceId), where('memberIds', 'array-contains', currentUser?.uid ?? ''))
-    : query(projectsRef, where('workspaceId', '==', workspaceId))
-  const snapshot = await getDocs(projectsQuery)
+  const snapshot = await getDocs(projectQuery(workspaceId, member?.role, currentUser?.uid))
   return snapshot.docs.map((item) => mapProject(item.id, item.data())).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+}
+
+export async function subscribeToProjects(workspaceId: string, onChange: (projects: Project[]) => void, onError: (error: Error) => void): Promise<Unsubscribe> {
+  const currentUser = auth.currentUser
+  const member = currentUser ? await getWorkspaceMember(workspaceId, currentUser.uid) : null
+  if (!currentUser || !member) throw new Error('Your workspace membership could not be verified.')
+  const unsubscribe = onSnapshot(projectQuery(workspaceId, member.role, currentUser.uid),
+    (snapshot) => onChange(snapshot.docs.map((item) => mapProject(item.id, item.data())).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())),
+    (error) => onError(error instanceof Error ? error : new Error('Unable to listen for project updates.')),
+  )
+  return unsubscribe
 }
 
 export async function getProject(projectId: string, workspaceId: string) {
@@ -113,12 +130,7 @@ export async function updateProject(projectId: string, workspaceId: string, inpu
   const existing = await getDoc(reference)
   if (!existing.exists()) throw new Error('Project could not be found.')
   if (existing.data().workspaceId !== workspaceId) throw new Error('This project does not belong to the active workspace.')
-  await updateDoc(reference, {
-    ...normalized,
-    startDate: normalized.startDate ? new Date(normalized.startDate) : null,
-    deadline: normalized.deadline ? new Date(normalized.deadline) : null,
-    updatedAt: serverTimestamp(),
-  })
+  await updateDoc(reference, { ...normalized, startDate: normalized.startDate ? new Date(normalized.startDate) : null, deadline: normalized.deadline ? new Date(normalized.deadline) : null, updatedAt: serverTimestamp() })
   const updated = await getDoc(reference)
   if (!updated.exists()) throw new Error('Project was updated but could not be loaded.')
   return mapProject(updated.id, updated.data())
