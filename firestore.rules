@@ -26,58 +26,33 @@ service cloud.firestore {
       allow delete: if false;
 
       match /members/{memberId} {
-        allow create: if signedIn()
-          && request.auth.uid == memberId
-          && request.resource.data.userId == request.auth.uid
-          && request.resource.data.workspaceId == workspaceId
-          && request.resource.data.status == 'pending';
-
-        allow read: if signedIn()
-          && (request.auth.uid == memberId || canApproveMembers(workspaceId));
-
-        allow update: if canManage(workspaceId)
-          && memberId != request.auth.uid
-          && request.resource.data.userId == resource.data.userId
-          && request.resource.data.workspaceId == resource.data.workspaceId
-          && request.resource.data.role in ['admin', 'manager', 'member', 'intern', 'viewer']
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'designation', 'status', 'updatedAt']);
-
+        allow create: if signedIn() && request.auth.uid == memberId && request.resource.data.userId == request.auth.uid && request.resource.data.workspaceId == workspaceId && request.resource.data.status == 'pending';
+        allow read: if signedIn() && (request.auth.uid == memberId || canApproveMembers(workspaceId));
+        allow update: if canManage(workspaceId) && memberId != request.auth.uid && request.resource.data.userId == resource.data.userId && request.resource.data.workspaceId == resource.data.workspaceId && request.resource.data.role in ['admin', 'manager', 'member', 'intern', 'viewer'] && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'designation', 'status', 'updatedAt']);
         allow delete: if false;
       }
 
       match /invitations/{invitationId} {
-        allow create: if canApproveMembers(workspaceId)
-          && request.resource.data.workspaceId == workspaceId
-          && request.resource.data.createdBy == request.auth.uid
-          && request.resource.data.token == invitationId
-          && request.resource.data.role in ['admin', 'manager', 'member', 'intern', 'viewer']
-          && request.resource.data.status == 'pending';
-
-        allow get: if resource.data.workspaceId == workspaceId
-          && resource.data.token == invitationId
-          && resource.data.status == 'pending'
-          && resource.data.expiresAt > request.time;
-
+        allow create: if canApproveMembers(workspaceId) && request.resource.data.workspaceId == workspaceId && request.resource.data.createdBy == request.auth.uid && request.resource.data.token == invitationId && request.resource.data.role in ['admin', 'manager', 'member', 'intern', 'viewer'] && request.resource.data.status == 'pending';
+        allow get: if resource.data.workspaceId == workspaceId && resource.data.token == invitationId && resource.data.status == 'pending' && resource.data.expiresAt > request.time;
         allow list: if canApproveMembers(workspaceId);
-
-        allow update: if (
-            canApproveMembers(workspaceId)
-            && request.resource.data.workspaceId == resource.data.workspaceId
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'revokedAt'])
-          ) || (
-            signedIn()
-            && resource.data.workspaceId == workspaceId
-            && resource.data.token == invitationId
-            && resource.data.status == 'pending'
-            && resource.data.expiresAt > request.time
-            && (resource.data.email == null || resource.data.email == request.auth.token.email)
-            && request.resource.data.status == 'accepted'
-            && request.resource.data.acceptedBy == request.auth.uid
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedBy', 'acceptedAt'])
-          );
-
+        allow update: if (canApproveMembers(workspaceId) && request.resource.data.workspaceId == resource.data.workspaceId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'revokedAt'])) || (signedIn() && resource.data.workspaceId == workspaceId && resource.data.token == invitationId && resource.data.status == 'pending' && resource.data.expiresAt > request.time && (resource.data.email == null || resource.data.email == request.auth.token.email) && request.resource.data.status == 'accepted' && request.resource.data.acceptedBy == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedBy', 'acceptedAt']));
         allow delete: if false;
       }
+    }
+
+    match /financeEntries/{entryId} {
+      allow create: if signedIn() && request.resource.data.workspaceId is string && canManage(request.resource.data.workspaceId) && request.resource.data.createdBy == request.auth.uid && request.resource.data.type in ['income', 'expense'] && request.resource.data.amount > 0;
+      allow read: if hasActiveMembership(resource.data.workspaceId);
+      allow update: if canManage(resource.data.workspaceId) && resource.data.workspaceId == request.resource.data.workspaceId;
+      allow delete: if canManage(resource.data.workspaceId);
+    }
+
+    match /calendarEvents/{eventId} {
+      allow create: if signedIn() && request.resource.data.workspaceId is string && canOperate(request.resource.data.workspaceId) && request.resource.data.createdBy == request.auth.uid;
+      allow read: if hasActiveMembership(resource.data.workspaceId);
+      allow update: if canOperate(resource.data.workspaceId) && resource.data.workspaceId == request.resource.data.workspaceId;
+      allow delete: if canOperate(resource.data.workspaceId);
     }
 
     match /websites/{websiteId} {
@@ -108,8 +83,6 @@ service cloud.firestore {
       allow delete: if canOperate(resource.data.workspaceId);
     }
 
-    match /{document=**} {
-      allow read, write: if false;
-    }
+    match /{document=**} { allow read, write: if false; }
   }
 }
