@@ -18,9 +18,8 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly WorkspacePermission[]> = {
   viewer: ['workspace.view','members.view','projects.view','tasks.view','clients.view','websites.view','calendar.view','ideas.view','documents.view','analytics.view'],
 }
 
-// These capabilities change workspace configuration or another member's access.
-// They remain owner/admin-only so custom grants cannot create a privilege-escalation path.
 const ROLE_ONLY_PERMISSIONS = new Set<WorkspacePermission>(['members.manage', 'access.manage', 'settings.manage'])
+const FULL_ACCESS_ROLES = new Set<UserRole>(['owner', 'admin'])
 
 export function roleHasPermission(role: UserRole, permission: WorkspacePermission): boolean {
   return ROLE_PERMISSIONS[role].includes(permission)
@@ -32,6 +31,11 @@ export function getRolePermissions(role: UserRole): readonly WorkspacePermission
 
 export function getEffectivePermissions(member: WorkspaceMember | null): readonly WorkspacePermission[] {
   if (!member || member.status !== 'active') return []
+
+  // Owner/admin are workspace administrators. Their baseline access must never
+  // be accidentally removed by a stale/custom denial saved on their member doc.
+  if (FULL_ACCESS_ROLES.has(member.role)) return ROLE_PERMISSIONS[member.role]
+
   const effective = new Set<WorkspacePermission>(ROLE_PERMISSIONS[member.role])
   for (const permission of member.grantedPermissions ?? []) {
     if (!ROLE_ONLY_PERMISSIONS.has(permission)) effective.add(permission)
@@ -44,13 +48,15 @@ export function getEffectivePermissions(member: WorkspaceMember | null): readonl
 
 export function memberHasPermission(member: WorkspaceMember | null, permission: WorkspacePermission): boolean {
   if (!member || member.status !== 'active') return false
-  if (ROLE_ONLY_PERMISSIONS.has(permission) && !['owner', 'admin'].includes(member.role)) return false
+  if (FULL_ACCESS_ROLES.has(member.role)) return roleHasPermission(member.role, permission)
+  if (ROLE_ONLY_PERMISSIONS.has(permission)) return false
   return getEffectivePermissions(member).includes(permission)
 }
 
 export function getPermissionState(member: WorkspaceMember | null, permission: WorkspacePermission): 'inherited' | 'granted' | 'denied' | 'unavailable' {
   if (!member || member.status !== 'active') return 'unavailable'
-  if (ROLE_ONLY_PERMISSIONS.has(permission) && !['owner', 'admin'].includes(member.role)) return 'unavailable'
+  if (FULL_ACCESS_ROLES.has(member.role)) return 'inherited'
+  if (ROLE_ONLY_PERMISSIONS.has(permission)) return 'unavailable'
   if ((member.deniedPermissions ?? []).includes(permission)) return 'denied'
   if ((member.grantedPermissions ?? []).includes(permission)) return 'granted'
   return roleHasPermission(member.role, permission) ? 'inherited' : 'unavailable'
