@@ -35,8 +35,12 @@ service cloud.firestore {
         allow read: if signedIn()
           && (request.auth.uid == memberId || canApproveMembers(workspaceId));
 
-        allow update: if canApproveMembers(workspaceId)
-          && memberId != request.auth.uid;
+        allow update: if canManage(workspaceId)
+          && memberId != request.auth.uid
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.workspaceId == resource.data.workspaceId
+          && request.resource.data.role in ['admin', 'manager', 'member', 'intern', 'viewer']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'designation', 'status', 'updatedAt']);
 
         allow delete: if false;
       }
@@ -49,8 +53,6 @@ service cloud.firestore {
           && request.resource.data.role in ['admin', 'manager', 'member', 'intern', 'viewer']
           && request.resource.data.status == 'pending';
 
-        // A bearer invitation token is the credential for this single-document lookup.
-        // Only the matching token document may be retrieved, and only while it is active.
         allow get: if resource.data.workspaceId == workspaceId
           && resource.data.token == invitationId
           && resource.data.status == 'pending'
@@ -79,77 +81,30 @@ service cloud.firestore {
     }
 
     match /websites/{websiteId} {
-      allow create: if signedIn()
-        && request.resource.data.workspaceId is string
-        && request.resource.data.workspaceId != ''
-        && canOperate(request.resource.data.workspaceId);
+      allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && canOperate(request.resource.data.workspaceId);
       allow read: if hasActiveMembership(resource.data.workspaceId);
-      allow update: if canOperate(resource.data.workspaceId)
-        && resource.data.workspaceId == request.resource.data.workspaceId;
+      allow update: if canOperate(resource.data.workspaceId) && resource.data.workspaceId == request.resource.data.workspaceId;
       allow delete: if canManage(resource.data.workspaceId);
     }
 
     match /clients/{clientId} {
-      allow create: if signedIn()
-        && request.resource.data.workspaceId is string
-        && request.resource.data.workspaceId != ''
-        && canOperate(request.resource.data.workspaceId);
+      allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && canOperate(request.resource.data.workspaceId);
       allow read: if hasActiveMembership(resource.data.workspaceId);
-      allow update: if canOperate(resource.data.workspaceId)
-        && resource.data.workspaceId == request.resource.data.workspaceId;
+      allow update: if canOperate(resource.data.workspaceId) && resource.data.workspaceId == request.resource.data.workspaceId;
       allow delete: if canManage(resource.data.workspaceId);
     }
 
     match /projects/{projectId} {
-      allow create: if signedIn()
-        && request.resource.data.workspaceId is string
-        && request.resource.data.workspaceId != ''
-        && canOperate(request.resource.data.workspaceId);
-
-      allow read: if hasActiveMembership(resource.data.workspaceId)
-        && (
-          get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role != 'intern'
-          || resource.data.ownerId == request.auth.uid
-        );
-
-      allow update: if resource.data.workspaceId == request.resource.data.workspaceId
-        && (
-          canOperate(resource.data.workspaceId)
-          || (
-            hasActiveMembership(resource.data.workspaceId)
-            && get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role in ['member', 'intern']
-            && resource.data.ownerId == request.auth.uid
-            && request.resource.data.ownerId == resource.data.ownerId
-          )
-        );
-
+      allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && canOperate(request.resource.data.workspaceId);
+      allow read: if hasActiveMembership(resource.data.workspaceId) && (get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role != 'intern' || resource.data.ownerId == request.auth.uid);
+      allow update: if resource.data.workspaceId == request.resource.data.workspaceId && (canOperate(resource.data.workspaceId) || (hasActiveMembership(resource.data.workspaceId) && get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role in ['member', 'intern'] && resource.data.ownerId == request.auth.uid && request.resource.data.ownerId == resource.data.ownerId));
       allow delete: if canManage(resource.data.workspaceId);
     }
 
     match /tasks/{taskId} {
-      allow create: if signedIn()
-        && request.resource.data.workspaceId is string
-        && request.resource.data.workspaceId != ''
-        && request.resource.data.createdBy == request.auth.uid
-        && canOperate(request.resource.data.workspaceId);
-
-      allow read: if hasActiveMembership(resource.data.workspaceId)
-        && (
-          get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role != 'intern'
-          || resource.data.assigneeId == request.auth.uid
-        );
-
-      allow update: if resource.data.workspaceId == request.resource.data.workspaceId
-        && (
-          canOperate(resource.data.workspaceId)
-          || (
-            hasActiveMembership(resource.data.workspaceId)
-            && get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role in ['member', 'intern']
-            && resource.data.assigneeId == request.auth.uid
-            && request.resource.data.assigneeId == resource.data.assigneeId
-          )
-        );
-
+      allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && request.resource.data.createdBy == request.auth.uid && canOperate(request.resource.data.workspaceId);
+      allow read: if hasActiveMembership(resource.data.workspaceId) && (get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role != 'intern' || resource.data.assigneeId == request.auth.uid);
+      allow update: if resource.data.workspaceId == request.resource.data.workspaceId && (canOperate(resource.data.workspaceId) || (hasActiveMembership(resource.data.workspaceId) && get(memberPath(resource.data.workspaceId, request.auth.uid)).data.role in ['member', 'intern'] && resource.data.assigneeId == request.auth.uid && request.resource.data.assigneeId == resource.data.assigneeId));
       allow delete: if canOperate(resource.data.workspaceId);
     }
 
