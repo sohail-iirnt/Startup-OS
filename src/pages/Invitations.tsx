@@ -37,9 +37,6 @@ function Invitations() {
     if (workspaceLoading || !workspaceId) return undefined
 
     let active = true
-    setLoading(true)
-    setError('')
-
     const unsubscribe = subscribeToWorkspaceInvitations(
       workspaceId,
       (next) => {
