@@ -136,30 +136,35 @@ export async function initializeDefaultWorkspace(
   if (userProfile?.defaultWorkspaceId) {
     const existingWorkspace = await getWorkspace(userProfile.defaultWorkspaceId)
     if (existingWorkspace) {
-      const existingMember = await getWorkspaceMember(existingWorkspace.id, userId)
-      if (!existingMember) {
-        await setWorkspaceMember(
-          existingWorkspace.id,
-          userId,
-          existingWorkspace.ownerId === userId ? 'owner' : 'member',
-          user,
-          'active',
-        )
-      }
+      // Never silently create an active membership for a non-owner.
+      // Invitations and workspace join requests must remain pending until
+      // an authorized workspace administrator approves them.
       return existingWorkspace
     }
   }
 
   const sharedWorkspace = await findDefaultWorkspace()
-  if (sharedWorkspace && userProfile?.defaultWorkspaceId) {
-    await setWorkspaceMember(
-      sharedWorkspace.id,
-      userId,
-      sharedWorkspace.ownerId === userId ? 'owner' : 'member',
-      user,
-      'active',
-    )
-    return sharedWorkspace
+  if (sharedWorkspace) {
+    const existingMember = await getWorkspaceMember(sharedWorkspace.id, userId)
+
+    if (existingMember) {
+      await setDefaultWorkspace(userId, sharedWorkspace.id)
+      return sharedWorkspace
+    }
+
+    // Only the workspace owner may be initialized as an active member here.
+    // Other users must enter through invitation/join-request approval flow.
+    if (sharedWorkspace.ownerId === userId) {
+      await setWorkspaceMember(
+        sharedWorkspace.id,
+        userId,
+        'owner',
+        user,
+        'active',
+      )
+      await setDefaultWorkspace(userId, sharedWorkspace.id)
+      return sharedWorkspace
+    }
   }
 
   return null
