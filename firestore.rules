@@ -11,14 +11,15 @@ service cloud.firestore {
     function isOwner(workspaceId) { return hasRole(workspaceId, 'owner'); }
     function isAdmin(workspaceId) { return hasRole(workspaceId, 'admin'); }
     function canApproveMembers(workspaceId) { return hasPermission(workspaceId, 'members.approve'); }
-    function canManage(workspaceId) { return hasPermission(workspaceId, 'members.manage'); }
+    function canManage(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin']); }
     function canOperate(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin', 'manager']) || hasPermission(workspaceId, 'projects.update'); }
     function canManageTasks(workspaceId) { return hasPermission(workspaceId, 'tasks.delete'); }
     function canCreateTasks(workspaceId) { return hasPermission(workspaceId, 'tasks.create'); }
     function canCreateProjects(workspaceId) { return hasPermission(workspaceId, 'projects.create'); }
 
     // Effective permission = role baseline + explicit grants - explicit denials.
-    // Owner/admin keep their existing role baseline; custom overrides are stored per member.
+    // Access-control administration itself remains owner/admin-only so a custom
+    // members.manage grant cannot be used to escalate another member's access.
     function hasPermission(workspaceId, permission) {
       return hasActiveMembership(workspaceId) && (
         (permission == 'workspace.view' && userRole(workspaceId) in ['owner','admin','manager','member','intern','viewer']) ||
