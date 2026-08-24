@@ -18,6 +18,7 @@ import Tasks from '../pages/Tasks'
 import Team from '../pages/Team'
 import Invitations from '../pages/Invitations'
 import MemberApprovals from '../pages/MemberApprovals'
+import MemberDetails from '../pages/MemberDetails'
 import WorkspaceSettings from '../pages/WorkspaceSettings'
 
 function AppRoutes() {
@@ -51,6 +52,7 @@ function AppRoutes() {
           </Route>
           <Route element={<ProtectedRoute requiredPermission="members.view" />}>
             <Route path="/team" element={<Team />} />
+            <Route path="/team/:userId" element={<MemberDetails />} />
           </Route>
           <Route element={<ProtectedRoute requiredPermission="members.approve" />}>
             <Route path="/team/invitations" element={<Invitations />} />
