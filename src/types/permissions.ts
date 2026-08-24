@@ -12,14 +12,14 @@ export type WorkspacePermission =
 const ROLE_PERMISSIONS: Record<UserRole, readonly WorkspacePermission[]> = {
   owner: ['workspace.view','members.view','members.approve','members.manage','projects.view','projects.create','projects.update','projects.delete','tasks.view','tasks.create','tasks.update','tasks.delete','clients.view','clients.manage','websites.view','websites.manage','finance.view','finance.manage','calendar.view','calendar.manage','ideas.view','documents.view','analytics.view','settings.manage'],
   admin: ['workspace.view','members.view','members.approve','members.manage','projects.view','projects.create','projects.update','projects.delete','tasks.view','tasks.create','tasks.update','tasks.delete','clients.view','clients.manage','websites.view','websites.manage','finance.view','finance.manage','calendar.view','calendar.manage','ideas.view','documents.view','analytics.view','settings.manage'],
-  manager: ['workspace.view','members.view','members.approve','members.manage','projects.view','projects.create','projects.update','tasks.view','tasks.create','tasks.update','tasks.delete','clients.view','clients.manage','websites.view','websites.manage','calendar.view','calendar.manage','ideas.view','documents.view','analytics.view'],
+  manager: ['workspace.view','members.view','members.approve','projects.view','projects.create','projects.update','tasks.view','tasks.create','tasks.update','tasks.delete','clients.view','clients.manage','websites.view','websites.manage','calendar.view','calendar.manage','ideas.view','documents.view','analytics.view'],
   member: ['workspace.view','members.view','projects.view','projects.update','tasks.view','tasks.create','tasks.update','clients.view','websites.view','calendar.view','ideas.view','documents.view','analytics.view'],
   intern: ['workspace.view','members.view','projects.view','projects.create','projects.update','tasks.view','tasks.update','calendar.view','ideas.view','documents.view'],
   viewer: ['workspace.view','members.view','projects.view','tasks.view','clients.view','websites.view','calendar.view','ideas.view','documents.view','analytics.view'],
 }
 
 // These capabilities can change the workspace itself or other members' access.
-// They are intentionally role-controlled and cannot be delegated through a custom grant.
+// They are intentionally role-controlled and cannot be delegated through custom grants.
 const ROLE_ONLY_PERMISSIONS = new Set<WorkspacePermission>(['members.manage', 'settings.manage'])
 
 export function roleHasPermission(role: UserRole, permission: WorkspacePermission): boolean {
@@ -33,9 +33,6 @@ export function getRolePermissions(role: UserRole): readonly WorkspacePermission
 export function getEffectivePermissions(member: WorkspaceMember | null): readonly WorkspacePermission[] {
   if (!member || member.status !== 'active') return []
   const effective = new Set<WorkspacePermission>(ROLE_PERMISSIONS[member.role])
-  if (!ROLE_ONLY_PERMISSIONS.has(member.role === 'owner' || member.role === 'admin' ? 'workspace.view' : 'workspace.view')) {
-    // Intentionally empty: role-only handling is applied below.
-  }
   for (const permission of member.grantedPermissions ?? []) {
     if (!ROLE_ONLY_PERMISSIONS.has(permission)) effective.add(permission)
   }
