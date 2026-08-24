@@ -8,12 +8,14 @@ service cloud.firestore {
     function userRole(workspaceId) { return get(memberPath(workspaceId, request.auth.uid)).data.role; }
     function hasRole(workspaceId, role) { return hasActiveMembership(workspaceId) && userRole(workspaceId) == role; }
     function hasAnyRole(workspaceId, roles) { return hasActiveMembership(workspaceId) && userRole(workspaceId) in roles; }
-    function isOwner(workspaceId) { return hasRole(workspaceId, 'owner'); }
-    function isAdmin(workspaceId) { return hasRole(workspaceId, 'admin'); }
-    function isWorkspaceAdmin(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin']); }
+    // Accept legacy/title-case administrator values so an older member record
+    // cannot suddenly lose all access after the RBAC upgrade.
+    function isOwner(workspaceId) { return hasActiveMembership(workspaceId) && userRole(workspaceId) in ['owner', 'Owner']; }
+    function isAdmin(workspaceId) { return hasActiveMembership(workspaceId) && userRole(workspaceId) in ['admin', 'Admin', 'administrator', 'Administrator']; }
+    function isWorkspaceAdmin(workspaceId) { return isOwner(workspaceId) || isAdmin(workspaceId); }
     function canApproveMembers(workspaceId) { return hasPermission(workspaceId, 'members.approve'); }
     function canManage(workspaceId) { return isWorkspaceAdmin(workspaceId); }
-    function canOperate(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin', 'manager']) || hasPermission(workspaceId, 'projects.update'); }
+    function canOperate(workspaceId) { return isWorkspaceAdmin(workspaceId) || hasPermission(workspaceId, 'projects.update'); }
     function canManageTasks(workspaceId) { return hasPermission(workspaceId, 'tasks.delete'); }
     function canCreateTasks(workspaceId) { return hasPermission(workspaceId, 'tasks.create'); }
     function canCreateProjects(workspaceId) { return hasPermission(workspaceId, 'projects.create'); }
