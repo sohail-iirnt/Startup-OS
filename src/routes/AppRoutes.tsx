@@ -25,6 +25,7 @@ import Calendar from '../pages/Calendar'
 import Ideas from '../pages/Ideas'
 import Documents from '../pages/Documents'
 import Analytics from '../pages/Analytics'
+import Goals from '../pages/Goals'
 
 function AppRoutes() {
   return (
@@ -42,6 +43,7 @@ function AppRoutes() {
         <Route element={<ProtectedRoute requiredPermission="members.view" />}><Route path="/team" element={<Team />} /><Route path="/team/:userId" element={<MemberDetails />} /></Route>
         <Route element={<ProtectedRoute requiredPermission="members.approve" />}><Route path="/team/invitations" element={<Invitations />} /><Route path="/team/approvals" element={<MemberApprovals />} /></Route>
         <Route element={<ProtectedRoute requiredPermission="calendar.view" />}><Route path="/calendar" element={<Calendar />} /></Route>
+        <Route element={<ProtectedRoute requiredPermission="goals.view" />}><Route path="/goals" element={<Goals />} /></Route>
         <Route element={<ProtectedRoute requiredPermission="finance.view" />}><Route path="/finance" element={<Finance />} /></Route>
         <Route element={<ProtectedRoute requiredPermission="ideas.view" />}><Route path="/ideas" element={<Ideas />} /></Route>
         <Route element={<ProtectedRoute requiredPermission="documents.view" />}><Route path="/documents" element={<Documents />} /></Route>
