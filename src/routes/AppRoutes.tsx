@@ -20,6 +20,7 @@ import Invitations from '../pages/Invitations'
 import MemberApprovals from '../pages/MemberApprovals'
 import MemberDetails from '../pages/MemberDetails'
 import WorkspaceSettings from '../pages/WorkspaceSettings'
+import AccessControl from '../pages/AccessControl'
 
 function AppRoutes() {
   return (
@@ -75,6 +76,7 @@ function AppRoutes() {
           </Route>
           <Route element={<ProtectedRoute requiredPermission="settings.manage" />}>
             <Route path="/settings" element={<WorkspaceSettings />} />
+            <Route path="/settings/access-control" element={<AccessControl />} />
           </Route>
           <Route path="/auth-test" element={<AuthTest />} />
         </Route>
