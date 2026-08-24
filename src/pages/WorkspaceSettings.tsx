@@ -12,6 +12,7 @@ import {
 import Card from '../components/ui/Card'
 import SectionHeader from '../components/ui/SectionHeader'
 import Button from '../components/ui/Button'
+import WorkspaceBrandingCard from '../components/workspace/WorkspaceBrandingCard'
 import { useWorkspace } from '../context/useWorkspace'
 import { useAuth } from '../context/useAuth'
 import {
@@ -318,6 +319,8 @@ function WorkspaceSettings() {
           </div>
         </Card>
       </div>
+
+      <WorkspaceBrandingCard />
 
       {createOpen && (
         <div
