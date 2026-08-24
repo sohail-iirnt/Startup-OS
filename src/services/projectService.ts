@@ -102,11 +102,24 @@ export async function getProject(projectId: string, workspaceId: string) {
   const member = currentUser ? await getWorkspaceMember(workspaceId, currentUser.uid) : null
   if (!currentUser || !member) throw new Error('Your workspace membership could not be verified.')
 
-  // Use the same role-aware query as the Projects list. This prevents an intern
-  // from bypassing project visibility by opening a project URL directly.
   const snapshot = await getDocs(projectQuery(workspaceId, member.role, currentUser.uid))
   const matching = snapshot.docs.find((item) => item.id === projectId)
   return matching ? mapProject(matching.id, matching.data()) : null
+}
+
+export async function subscribeToProject(projectId: string, workspaceId: string, onChange: (project: Project | null) => void, onError: (error: Error) => void): Promise<Unsubscribe> {
+  if (!projectId || !workspaceId) throw new Error('Project and workspace are required.')
+  const currentUser = auth.currentUser
+  const member = currentUser ? await getWorkspaceMember(workspaceId, currentUser.uid) : null
+  if (!currentUser || !member) throw new Error('Your workspace membership could not be verified.')
+
+  return onSnapshot(projectQuery(workspaceId, member.role, currentUser.uid),
+    (snapshot) => {
+      const matching = snapshot.docs.find((item) => item.id === projectId)
+      onChange(matching ? mapProject(matching.id, matching.data()) : null)
+    },
+    (error) => onError(error instanceof Error ? error : new Error('Unable to listen for project updates.')),
+  )
 }
 
 export async function createProject(workspaceId: string, input: CreateProjectInput) {
