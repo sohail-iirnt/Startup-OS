@@ -1,8 +1,9 @@
 import {
+  collection,
   doc,
   getDoc,
   getDocs,
-  collection,
+  onSnapshot,
   orderBy,
   query,
   setDoc,
@@ -111,6 +112,18 @@ export async function getWorkspaceInvitations(
   )
 
   return snapshot.docs.map(toInvitation)
+}
+
+export function subscribeToWorkspaceInvitations(
+  workspaceId: string,
+  onChange: (invitations: WorkspaceInvitation[]) => void,
+  onError?: (error: Error) => void,
+): () => void {
+  return onSnapshot(
+    query(invitationCollection(workspaceId), orderBy('createdAt', 'desc')),
+    (snapshot) => onChange(snapshot.docs.map(toInvitation)),
+    (error) => onError?.(error),
+  )
 }
 
 export async function getWorkspaceInvitationByToken(
