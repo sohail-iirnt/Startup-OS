@@ -6,16 +6,8 @@ service cloud.firestore {
     function memberPath(workspaceId, userId) { return /databases/$(database)/documents/workspaces/$(workspaceId)/members/$(userId); }
     function hasActiveMembership(workspaceId) { return signedIn() && exists(memberPath(workspaceId, request.auth.uid)) && get(memberPath(workspaceId, request.auth.uid)).data.status == 'active'; }
     function userRole(workspaceId) { return get(memberPath(workspaceId, request.auth.uid)).data.role; }
-    // Normalize legacy/title-case role values so RBAC remains stable for older members.
     function normalizedRole(workspaceId) {
-      return userRole(workspaceId) == 'Owner' ? 'owner' :
-        userRole(workspaceId) == 'Admin' ? 'admin' :
-        userRole(workspaceId) == 'administrator' ? 'admin' :
-        userRole(workspaceId) == 'Administrator' ? 'admin' :
-        userRole(workspaceId) == 'Manager' ? 'manager' :
-        userRole(workspaceId) == 'Member' ? 'member' :
-        userRole(workspaceId) == 'Intern' ? 'intern' :
-        userRole(workspaceId) == 'Viewer' ? 'viewer' : userRole(workspaceId);
+      return userRole(workspaceId) == 'Owner' ? 'owner' : userRole(workspaceId) == 'Admin' ? 'admin' : userRole(workspaceId) == 'administrator' ? 'admin' : userRole(workspaceId) == 'Administrator' ? 'admin' : userRole(workspaceId) == 'Manager' ? 'manager' : userRole(workspaceId) == 'Member' ? 'member' : userRole(workspaceId) == 'Intern' ? 'intern' : userRole(workspaceId) == 'Viewer' ? 'viewer' : userRole(workspaceId);
     }
     function hasRole(workspaceId, role) { return hasActiveMembership(workspaceId) && normalizedRole(workspaceId) == role; }
     function hasAnyRole(workspaceId, roles) { return hasActiveMembership(workspaceId) && normalizedRole(workspaceId) in roles; }
@@ -24,15 +16,10 @@ service cloud.firestore {
     function isWorkspaceAdmin(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin']); }
     function canApproveMembers(workspaceId) { return hasPermission(workspaceId, 'members.approve'); }
     function canManage(workspaceId) { return isWorkspaceAdmin(workspaceId); }
-    function canOperate(workspaceId) { return isWorkspaceAdmin(workspaceId) || hasPermission(workspaceId, 'projects.update'); }
-    function canManageTasks(workspaceId) { return hasPermission(workspaceId, 'tasks.delete'); }
     function canCreateTasks(workspaceId) { return hasPermission(workspaceId, 'tasks.create'); }
     function canCreateProjects(workspaceId) { return hasPermission(workspaceId, 'projects.create'); }
     function canInviteRole(workspaceId, role) { return isWorkspaceAdmin(workspaceId) ? role in ['admin', 'manager', 'member', 'intern', 'viewer'] : role in ['member', 'intern', 'viewer']; }
 
-    // Owner/admin always retain their complete administrator baseline. Custom
-    // grants/denials apply to non-administrative roles and cannot lock an admin
-    // out of their own workspace.
     function hasPermission(workspaceId, permission) {
       return hasActiveMembership(workspaceId) && (
         isWorkspaceAdmin(workspaceId) ||
@@ -42,7 +29,6 @@ service cloud.firestore {
         (permission == 'projects.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
         (permission == 'projects.create' && normalizedRole(workspaceId) in ['manager','intern']) ||
         (permission == 'projects.update' && normalizedRole(workspaceId) in ['manager','member','intern']) ||
-        (permission == 'projects.delete' && false) ||
         (permission == 'tasks.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
         (permission == 'tasks.create' && normalizedRole(workspaceId) in ['manager','member']) ||
         (permission == 'tasks.update' && normalizedRole(workspaceId) in ['manager','member','intern']) ||
@@ -51,14 +37,15 @@ service cloud.firestore {
         (permission == 'clients.manage' && normalizedRole(workspaceId) == 'manager') ||
         (permission == 'websites.view' && normalizedRole(workspaceId) in ['manager','member','viewer']) ||
         (permission == 'websites.manage' && normalizedRole(workspaceId) == 'manager') ||
-        (permission == 'finance.view' && false) ||
-        (permission == 'finance.manage' && false) ||
         (permission == 'calendar.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
         (permission == 'calendar.manage' && normalizedRole(workspaceId) == 'manager') ||
         (permission == 'ideas.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
+        (permission == 'ideas.manage' && normalizedRole(workspaceId) in ['manager','member','intern']) ||
         (permission == 'documents.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
+        (permission == 'documents.manage' && normalizedRole(workspaceId) in ['manager','member','intern']) ||
+        (permission == 'goals.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
+        (permission == 'goals.manage' && normalizedRole(workspaceId) in ['manager','member','intern']) ||
         (permission == 'analytics.view' && normalizedRole(workspaceId) in ['manager','member','viewer']) ||
-        (permission == 'settings.manage' && false) ||
         (!(permission in ['members.manage', 'access.manage', 'settings.manage']) && get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions)
       ) && !(isWorkspaceAdmin(workspaceId) == false && get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions);
     }
@@ -87,9 +74,12 @@ service cloud.firestore {
       }
     }
     match /financeEntries/{entryId} { allow create: if signedIn() && request.resource.data.workspaceId is string && hasPermission(request.resource.data.workspaceId, 'finance.manage') && request.resource.data.createdBy == request.auth.uid && request.resource.data.type in ['income', 'expense'] && request.resource.data.amount > 0; allow read: if hasPermission(resource.data.workspaceId, 'finance.view'); allow update: if hasPermission(resource.data.workspaceId, 'finance.manage') && resource.data.workspaceId == request.resource.data.workspaceId; allow delete: if hasPermission(resource.data.workspaceId, 'finance.manage'); }
-    match /calendarEvents/{eventId} { allow create: if signedIn() && request.resource.data.workspaceId is string && hasPermission(request.resource.data.workspaceId, 'calendar.manage') && request.resource.data.createdBy == request.auth.uid; allow read: if hasPermission(resource.data.workspaceId, 'calendar.view'); allow update: if hasPermission(resource.data.workspaceId, 'calendar.manage') && resource.data.workspaceId == request.resource.data.workspaceId; allow delete: if hasPermission(resource.data.workspaceId, 'calendar.manage'); }
+    match /calendarEvents/{eventId} { allow create: if signedIn() && request.resource.data.workspaceId is string && hasPermission(request.resource.data.workspaceId, 'calendar.manage') && request.resource.data.createdBy == request.auth.uid; allow read: if hasPermission(resource.data.workspaceId, 'calendar.view'); allow update: if hasPermission(request.resource.data.workspaceId, 'calendar.manage') && resource.data.workspaceId == request.resource.data.workspaceId; allow delete: if hasPermission(resource.data.workspaceId, 'calendar.manage'); }
     match /websites/{websiteId} { allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && hasPermission(request.resource.data.workspaceId, 'websites.manage'); allow read: if hasPermission(resource.data.workspaceId, 'websites.view'); allow update: if hasPermission(resource.data.workspaceId, 'websites.manage') && resource.data.workspaceId == request.resource.data.workspaceId; allow delete: if hasPermission(resource.data.workspaceId, 'websites.manage'); }
     match /clients/{clientId} { allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && hasPermission(request.resource.data.workspaceId, 'clients.manage'); allow read: if hasPermission(resource.data.workspaceId, 'clients.view'); allow update: if hasPermission(resource.data.workspaceId, 'clients.manage'); allow delete: if hasPermission(resource.data.workspaceId, 'clients.manage'); }
+    match /ideas/{ideaId} { allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && hasPermission(request.resource.data.workspaceId, 'ideas.manage') && request.resource.data.createdBy == request.auth.uid; allow read: if hasPermission(resource.data.workspaceId, 'ideas.view'); allow update: if hasPermission(resource.data.workspaceId, 'ideas.manage') && resource.data.workspaceId == request.resource.data.workspaceId; allow delete: if hasPermission(resource.data.workspaceId, 'ideas.manage'); }
+    match /documents/{documentId} { allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && hasPermission(request.resource.data.workspaceId, 'documents.manage') && request.resource.data.createdBy == request.auth.uid; allow read: if hasPermission(resource.data.workspaceId, 'documents.view'); allow update: if hasPermission(resource.data.workspaceId, 'documents.manage') && resource.data.workspaceId == request.resource.data.workspaceId; allow delete: if hasPermission(resource.data.workspaceId, 'documents.manage'); }
+    match /goals/{goalId} { allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && hasPermission(request.resource.data.workspaceId, 'goals.manage') && request.resource.data.createdBy == request.auth.uid; allow read: if hasPermission(resource.data.workspaceId, 'goals.view'); allow update: if hasPermission(resource.data.workspaceId, 'goals.manage') && resource.data.workspaceId == request.resource.data.workspaceId; allow delete: if hasPermission(resource.data.workspaceId, 'goals.manage'); }
     match /projects/{projectId} {
       allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && canCreateProjects(request.resource.data.workspaceId) && (normalizedRole(request.resource.data.workspaceId) != 'intern' || (request.resource.data.ownerId == request.auth.uid && request.resource.data.memberIds is list && request.auth.uid in request.resource.data.memberIds));
       allow read: if (normalizedRole(resource.data.workspaceId) == 'intern' ? ((resource.data.ownerId == request.auth.uid) || (resource.data.keys().hasAll(['memberIds']) && request.auth.uid in resource.data.memberIds)) : hasPermission(resource.data.workspaceId, 'projects.view'));
