@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   orderBy,
   query,
@@ -26,38 +27,31 @@ function memberRef(workspaceId: string, userId: string) {
   return doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId)
 }
 
+async function enrichMember(member: WorkspaceMember): Promise<WorkspaceMember> {
+  const profile = await getUserProfile(member.userId)
+  return {
+    ...member,
+    displayName: profile?.displayName || member.displayName || member.email || 'Unnamed member',
+    email: profile?.email || member.email || '',
+    photoURL: profile?.photoURL || member.photoURL || null,
+  }
+}
+
 export async function getWorkspaceMembers(workspaceId: string): Promise<WorkspaceMember[]> {
   const membersRef = collection(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION)
   const snapshot = await getDocs(query(membersRef, where('status', '==', 'active'), orderBy('joinedAt', 'asc')))
-
-  return Promise.all(snapshot.docs.map(async (item) => {
-    const member = { id: item.id, ...item.data() } as WorkspaceMember
-    const profile = await getUserProfile(member.userId)
-    return {
-      ...member,
-      displayName: profile?.displayName || member.displayName || member.email || 'Unnamed member',
-      email: profile?.email || member.email || '',
-      photoURL: profile?.photoURL || member.photoURL || null,
-    }
-  }))
+  return Promise.all(snapshot.docs.map(async (item) => enrichMember({ id: item.id, ...item.data() } as WorkspaceMember)))
 }
 
 export async function getWorkspaceMemberDetails(workspaceId: string, userId: string): Promise<WorkspaceMember | null> {
-  const members = await getWorkspaceMembers(workspaceId)
-  return members.find((member) => member.userId === userId || member.id === userId) || null
+  const snapshot = await getDoc(memberRef(workspaceId, userId))
+  if (!snapshot.exists()) return null
+  return enrichMember({ id: snapshot.id, ...snapshot.data() } as WorkspaceMember)
 }
 
 export async function getPendingMembers(workspaceId: string): Promise<WorkspaceMember[]> {
   const members = await getPendingWorkspaceMembers(workspaceId)
-  return Promise.all(members.map(async (member) => {
-    const profile = await getUserProfile(member.userId)
-    return {
-      ...member,
-      displayName: profile?.displayName || member.displayName || member.email || 'Unnamed member',
-      email: profile?.email || member.email || '',
-      photoURL: profile?.photoURL || member.photoURL || null,
-    }
-  }))
+  return Promise.all(members.map(enrichMember))
 }
 
 export async function approveMember(workspaceId: string, userId: string, role: UserRole): Promise<void> {
