@@ -23,13 +23,13 @@ function Tasks() {
   const [tasks, setTasks] = useState<Task[]>([]); const [members, setMembers] = useState<WorkspaceMember[]>([]); const [loading, setLoading] = useState(true); const [saving, setSaving] = useState(false); const [deletingId, setDeletingId] = useState<string | null>(null); const [error, setError] = useState(''); const [search, setSearch] = useState(''); const [modalOpen, setModalOpen] = useState(false); const [editingTask, setEditingTask] = useState<Task | null>(null); const [modalInstance, setModalInstance] = useState(0); const [taskToDelete, setTaskToDelete] = useState<Task | null>(null)
 
   useEffect(() => {
-    if (workspaceLoading || !workspace?.id || !user?.uid) return
+    if (workspaceLoading || !workspace?.id || !user?.uid) return undefined
+    const workspaceId = workspace.id
     let active = true; let unsubscribe: (() => void) | undefined
     async function start() {
-      setLoading(true); setError('')
       try {
-        if (canAssign) setMembers(await getWorkspaceMembers(workspace.id))
-        unsubscribe = await subscribeToTasks(workspace.id, (next) => { if (active) { setTasks(next); setLoading(false) } }, (listenError) => { if (active) { setError(listenError.message); setLoading(false) } })
+        if (canAssign) setMembers(await getWorkspaceMembers(workspaceId))
+        unsubscribe = await subscribeToTasks(workspaceId, (next) => { if (active) { setTasks(next); setLoading(false) } }, (listenError) => { if (active) { setError(listenError.message); setLoading(false) } })
       } catch (loadError) { if (active) { setError(loadError instanceof Error ? loadError.message : 'Unable to load tasks.'); setLoading(false) } }
     }
     void start(); return () => { active = false; unsubscribe?.() }
