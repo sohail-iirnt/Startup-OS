@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { CheckCircle2, Clock3, ListTodo, Plus, Search, UserRound } from 'lucide-react'
 
 import Button from '../components/ui/Button'
@@ -63,7 +63,7 @@ function Tasks() {
   const [modalInstance, setModalInstance] = useState(0)
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null)
 
-  async function loadTasks() {
+  const loadTasks = useCallback(async () => {
     if (!workspace?.id) {
       return
     }
@@ -86,13 +86,17 @@ function Tasks() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [workspace?.id])
 
   useEffect(() => {
-    if (!workspaceLoading && workspace?.id) {
-      void loadTasks()
+    if (workspaceLoading || !workspace?.id) {
+      return
     }
-  }, [workspace?.id, workspaceLoading])
+
+    queueMicrotask(() => {
+      void loadTasks()
+    })
+  }, [workspaceLoading, workspace?.id, loadTasks])
 
   function openCreate() {
     setEditingTask(null)
