@@ -10,50 +10,51 @@ service cloud.firestore {
     function hasAnyRole(workspaceId, roles) { return hasActiveMembership(workspaceId) && userRole(workspaceId) in roles; }
     function isOwner(workspaceId) { return hasRole(workspaceId, 'owner'); }
     function isAdmin(workspaceId) { return hasRole(workspaceId, 'admin'); }
+    function isWorkspaceAdmin(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin']); }
     function canApproveMembers(workspaceId) { return hasPermission(workspaceId, 'members.approve'); }
-    function canManage(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin']); }
+    function canManage(workspaceId) { return isWorkspaceAdmin(workspaceId); }
     function canOperate(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin', 'manager']) || hasPermission(workspaceId, 'projects.update'); }
     function canManageTasks(workspaceId) { return hasPermission(workspaceId, 'tasks.delete'); }
     function canCreateTasks(workspaceId) { return hasPermission(workspaceId, 'tasks.create'); }
     function canCreateProjects(workspaceId) { return hasPermission(workspaceId, 'projects.create'); }
-    function canInviteRole(workspaceId, role) { return isOwner(workspaceId) || isAdmin(workspaceId) ? role in ['admin', 'manager', 'member', 'intern', 'viewer'] : role in ['member', 'intern', 'viewer']; }
+    function canInviteRole(workspaceId, role) { return isWorkspaceAdmin(workspaceId) ? role in ['admin', 'manager', 'member', 'intern', 'viewer'] : role in ['member', 'intern', 'viewer']; }
 
-    // Effective permission = role baseline + explicit grants - explicit denials.
-    // Privileged access-management capabilities remain owner/admin-only.
+    // Owner/admin always retain their complete administrator baseline. Custom
+    // grants/denials apply to non-administrative roles and cannot lock an admin
+    // out of their own workspace.
     function hasPermission(workspaceId, permission) {
       return hasActiveMembership(workspaceId) && (
-        (permission == 'workspace.view' && userRole(workspaceId) in ['owner','admin','manager','member','intern','viewer']) ||
-        (permission == 'members.view' && userRole(workspaceId) in ['owner','admin','manager','member','intern','viewer']) ||
-        (permission == 'members.approve' && userRole(workspaceId) in ['owner','admin','manager']) ||
-        (permission == 'members.manage' && userRole(workspaceId) in ['owner','admin']) ||
-        (permission == 'access.manage' && userRole(workspaceId) in ['owner','admin']) ||
-        (permission == 'projects.view' && userRole(workspaceId) in ['owner','admin','manager','member','intern','viewer']) ||
-        (permission == 'projects.create' && userRole(workspaceId) in ['owner','admin','manager','intern']) ||
-        (permission == 'projects.update' && userRole(workspaceId) in ['owner','admin','manager','member','intern']) ||
-        (permission == 'projects.delete' && userRole(workspaceId) in ['owner','admin']) ||
-        (permission == 'tasks.view' && userRole(workspaceId) in ['owner','admin','manager','member','intern','viewer']) ||
-        (permission == 'tasks.create' && userRole(workspaceId) in ['owner','admin','manager','member']) ||
-        (permission == 'tasks.update' && userRole(workspaceId) in ['owner','admin','manager','member','intern']) ||
-        (permission == 'tasks.delete' && userRole(workspaceId) in ['owner','admin','manager']) ||
-        (permission == 'clients.view' && userRole(workspaceId) in ['owner','admin','manager','member','viewer']) ||
-        (permission == 'clients.manage' && userRole(workspaceId) in ['owner','admin','manager']) ||
-        (permission == 'websites.view' && userRole(workspaceId) in ['owner','admin','manager','member','viewer']) ||
-        (permission == 'websites.manage' && userRole(workspaceId) in ['owner','admin','manager']) ||
-        (permission == 'finance.view' && userRole(workspaceId) in ['owner','admin']) ||
-        (permission == 'finance.manage' && userRole(workspaceId) in ['owner','admin']) ||
-        (permission == 'calendar.view' && userRole(workspaceId) in ['owner','admin','manager','member','intern','viewer']) ||
-        (permission == 'calendar.manage' && userRole(workspaceId) in ['owner','admin','manager']) ||
-        (permission == 'ideas.view' && userRole(workspaceId) in ['owner','admin','manager','member','intern','viewer']) ||
-        (permission == 'documents.view' && userRole(workspaceId) in ['owner','admin','manager','member','intern','viewer']) ||
-        (permission == 'analytics.view' && userRole(workspaceId) in ['owner','admin','manager','member','viewer']) ||
-        (permission == 'settings.manage' && userRole(workspaceId) in ['owner','admin']) ||
+        isWorkspaceAdmin(workspaceId) ||
+        (permission == 'workspace.view' && userRole(workspaceId) in ['manager','member','intern','viewer']) ||
+        (permission == 'members.view' && userRole(workspaceId) in ['manager','member','intern','viewer']) ||
+        (permission == 'members.approve' && userRole(workspaceId) == 'manager') ||
+        (permission == 'projects.view' && userRole(workspaceId) in ['manager','member','intern','viewer']) ||
+        (permission == 'projects.create' && userRole(workspaceId) in ['manager','intern']) ||
+        (permission == 'projects.update' && userRole(workspaceId) in ['manager','member','intern']) ||
+        (permission == 'projects.delete' && false) ||
+        (permission == 'tasks.view' && userRole(workspaceId) in ['manager','member','intern','viewer']) ||
+        (permission == 'tasks.create' && userRole(workspaceId) in ['manager','member']) ||
+        (permission == 'tasks.update' && userRole(workspaceId) in ['manager','member','intern']) ||
+        (permission == 'tasks.delete' && userRole(workspaceId) == 'manager') ||
+        (permission == 'clients.view' && userRole(workspaceId) in ['manager','member','viewer']) ||
+        (permission == 'clients.manage' && userRole(workspaceId) == 'manager') ||
+        (permission == 'websites.view' && userRole(workspaceId) in ['manager','member','viewer']) ||
+        (permission == 'websites.manage' && userRole(workspaceId) == 'manager') ||
+        (permission == 'finance.view' && false) ||
+        (permission == 'finance.manage' && false) ||
+        (permission == 'calendar.view' && userRole(workspaceId) in ['manager','member','intern','viewer']) ||
+        (permission == 'calendar.manage' && userRole(workspaceId) == 'manager') ||
+        (permission == 'ideas.view' && userRole(workspaceId) in ['manager','member','intern','viewer']) ||
+        (permission == 'documents.view' && userRole(workspaceId) in ['manager','member','intern','viewer']) ||
+        (permission == 'analytics.view' && userRole(workspaceId) in ['manager','member','viewer']) ||
+        (permission == 'settings.manage' && false) ||
         (!(permission in ['members.manage', 'access.manage', 'settings.manage']) && get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions)
-      ) && !(get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions);
+      ) && !(isWorkspaceAdmin(workspaceId) == false && get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions);
     }
 
     function canUpdateOwnTask(workspaceId, taskId) { return hasActiveMembership(workspaceId) && userRole(workspaceId) == 'intern' && get(/databases/$(database)/documents/tasks/$(taskId)).data.assigneeId == request.auth.uid && hasPermission(workspaceId, 'tasks.update'); }
     function canUpdateOwnProject(workspaceId, projectId) { return hasActiveMembership(workspaceId) && userRole(workspaceId) == 'intern' && hasPermission(workspaceId, 'projects.update') && ((get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid) || (get(/databases/$(database)/documents/projects/$(projectId)).data.keys().hasAll(['memberIds']) && request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.memberIds)); }
-    function canApproveMemberUpdate(workspaceId) { return canApproveMembers(workspaceId) && request.resource.data.role in (isOwner(workspaceId) || isAdmin(workspaceId) ? ['admin', 'manager', 'member', 'intern', 'viewer'] : ['member', 'intern', 'viewer']) && request.resource.data.status == 'active'; }
+    function canApproveMemberUpdate(workspaceId) { return canApproveMembers(workspaceId) && request.resource.data.role in (isWorkspaceAdmin(workspaceId) ? ['admin', 'manager', 'member', 'intern', 'viewer'] : ['member', 'intern', 'viewer']) && request.resource.data.status == 'active'; }
 
     match /users/{userId} { allow read: if signedIn(); allow create, update: if signedIn() && request.auth.uid == userId; allow delete: if false; }
     match /workspaces/{workspaceId} {
