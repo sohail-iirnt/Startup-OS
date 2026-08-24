@@ -40,6 +40,22 @@ service cloud.firestore {
 
         allow delete: if false;
       }
+
+      match /invitations/{invitationId} {
+        allow create: if canApproveMembers(workspaceId)
+          && request.resource.data.workspaceId == workspaceId
+          && request.resource.data.createdBy == request.auth.uid
+          && request.resource.data.role in ['admin', 'manager', 'member', 'intern', 'viewer']
+          && request.resource.data.status == 'pending';
+
+        allow read: if canApproveMembers(workspaceId);
+
+        allow update: if canApproveMembers(workspaceId)
+          && request.resource.data.workspaceId == resource.data.workspaceId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'revokedAt']);
+
+        allow delete: if false;
+      }
     }
 
     match /websites/{websiteId} {
