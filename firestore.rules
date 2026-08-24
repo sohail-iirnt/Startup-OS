@@ -17,6 +17,11 @@ service cloud.firestore {
     function canCreateTasks(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin', 'manager', 'member']); }
     function canUpdateOwnTask(workspaceId, taskId) { return hasActiveMembership(workspaceId) && userRole(workspaceId) in ['member', 'intern'] && get(/databases/$(database)/documents/tasks/$(taskId)).data.assigneeId == request.auth.uid; }
     function canUpdateOwnProject(workspaceId, projectId) { return hasActiveMembership(workspaceId) && userRole(workspaceId) in ['member', 'intern'] && get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid; }
+    function canApproveMemberUpdate(workspaceId) {
+      return canApproveMembers(workspaceId)
+        && request.resource.data.role in (isOwner(workspaceId) || isAdmin(workspaceId) ? ['admin', 'manager', 'member', 'intern', 'viewer'] : ['member', 'intern', 'viewer'])
+        && request.resource.data.status == 'active';
+    }
 
     match /users/{userId} {
       allow read: if signedIn();
@@ -33,7 +38,7 @@ service cloud.firestore {
       match /members/{memberId} {
         allow create: if signedIn() && request.auth.uid == memberId && request.resource.data.userId == request.auth.uid && request.resource.data.workspaceId == workspaceId && request.resource.data.status == 'pending';
         allow read: if signedIn() && (request.auth.uid == memberId || canApproveMembers(workspaceId));
-        allow update: if canManage(workspaceId) && memberId != request.auth.uid && request.resource.data.userId == resource.data.userId && request.resource.data.workspaceId == resource.data.workspaceId && request.resource.data.role in ['admin', 'manager', 'member', 'intern', 'viewer'] && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'designation', 'status', 'updatedAt']);
+        allow update: if memberId != request.auth.uid && request.resource.data.userId == resource.data.userId && request.resource.data.workspaceId == resource.data.workspaceId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'designation', 'status', 'updatedAt']) && (canManage(workspaceId) || (canApproveMemberUpdate(workspaceId) && resource.data.status == 'pending'));
         allow delete: if false;
       }
 
