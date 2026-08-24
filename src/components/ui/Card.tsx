@@ -1,7 +1,7 @@
 import type { HTMLAttributes, ReactNode } from 'react'
 
 type CardProps = HTMLAttributes<HTMLDivElement> & {
-  children: ReactNode
+  children?: ReactNode
   hover?: boolean
 }
 
