@@ -38,13 +38,13 @@ export const navigationSections: NavigationSection[] = [
     { label: 'Tasks', path: '/tasks', icon: CheckSquare, permission: 'tasks.view' },
     { label: 'Team', path: '/team', icon: Users, permission: 'members.view' },
     { label: 'Invitations', path: '/team/invitations', icon: MailPlus, permission: 'members.approve' },
-    { label: 'Calendar', path: '/calendar', icon: CalendarDays },
+    { label: 'Calendar', path: '/calendar', icon: CalendarDays, permission: 'calendar.view' },
   ] },
   { label: 'Finance', items: [{ label: 'Finance', path: '/finance', icon: CircleDollarSign, permission: 'finance.view' }] },
   { label: 'Knowledge', items: [
-    { label: 'Ideas', path: '/ideas', icon: Lightbulb },
-    { label: 'Documents', path: '/documents', icon: FileText },
+    { label: 'Ideas', path: '/ideas', icon: Lightbulb, permission: 'ideas.view' },
+    { label: 'Documents', path: '/documents', icon: FileText, permission: 'documents.view' },
   ] },
-  { label: 'Insights', items: [{ label: 'Analytics', path: '/analytics', icon: BarChart3 }] },
+  { label: 'Insights', items: [{ label: 'Analytics', path: '/analytics', icon: BarChart3, permission: 'analytics.view' }] },
   { label: 'System', items: [{ label: 'Settings', path: '/settings', icon: Settings, permission: 'settings.manage' }] },
 ]
