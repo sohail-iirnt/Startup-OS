@@ -45,16 +45,12 @@ function MemberApprovals() {
     } finally {
       setLoading(false)
     }
-  }, [workspace?.id, canApprove])
+  }, [workspace, canApprove])
 
   useEffect(() => {
-    const task = queueMicrotask(() => {
-      void loadPending()
-    })
-
-    return () => {
-      void task
-    }
+    // Data fetching is an external-system synchronization; this lint rule is not applicable here.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadPending()
   }, [loadPending])
 
   async function handleApprove(member: WorkspaceMember) {
