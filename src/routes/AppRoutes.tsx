@@ -56,13 +56,21 @@ function AppRoutes() {
             <Route path="/team/invitations" element={<Invitations />} />
             <Route path="/team/approvals" element={<MemberApprovals />} />
           </Route>
-          <Route path="/calendar" element={<PlaceholderPage title="Calendar" description="Centralize meetings, deadlines, events, and important business dates." />} />
+          <Route element={<ProtectedRoute requiredPermission="calendar.view" />}>
+            <Route path="/calendar" element={<PlaceholderPage title="Calendar" description="Centralize meetings, deadlines, events, and important business dates." />} />
+          </Route>
           <Route element={<ProtectedRoute requiredPermission="finance.view" />}>
             <Route path="/finance" element={<PlaceholderPage title="Finance" description="Track revenue, expenses, transactions, financial health, and reporting." />} />
           </Route>
-          <Route path="/ideas" element={<PlaceholderPage title="Ideas" description="Capture, organize, evaluate, and develop ideas without losing them." />} />
-          <Route path="/documents" element={<PlaceholderPage title="Documents" description="Organize important business documents and knowledge." />} />
-          <Route path="/analytics" element={<PlaceholderPage title="Analytics" description="Turn business activity into useful insights and decision-making signals." />} />
+          <Route element={<ProtectedRoute requiredPermission="ideas.view" />}>
+            <Route path="/ideas" element={<PlaceholderPage title="Ideas" description="Capture, organize, evaluate, and develop ideas without losing them." />} />
+          </Route>
+          <Route element={<ProtectedRoute requiredPermission="documents.view" />}>
+            <Route path="/documents" element={<PlaceholderPage title="Documents" description="Organize important business documents and knowledge." />} />
+          </Route>
+          <Route element={<ProtectedRoute requiredPermission="analytics.view" />}>
+            <Route path="/analytics" element={<PlaceholderPage title="Analytics" description="Turn business activity into useful insights and decision-making signals." />} />
+          </Route>
           <Route element={<ProtectedRoute requiredPermission="settings.manage" />}>
             <Route path="/settings" element={<WorkspaceSettings />} />
           </Route>
