@@ -54,12 +54,20 @@ const ALL_PERMISSIONS = permissionGroups.flatMap((group) => group.permissions.ma
 
 function roleLabel(role: UserRole) { return role.charAt(0).toUpperCase() + role.slice(1) }
 
+function samePermissions(left: WorkspacePermission[], right: WorkspacePermission[]) {
+  if (left.length !== right.length) return false
+  const rightSet = new Set(right)
+  return left.every((permission) => rightSet.has(permission))
+}
+
 function AccessControl() {
   const { workspace, member: currentMember, hasPermission } = useWorkspace()
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [selectedMemberId, setSelectedMemberId] = useState('')
   const [granted, setGranted] = useState<WorkspacePermission[]>([])
   const [denied, setDenied] = useState<WorkspacePermission[]>([])
+  const [savedGranted, setSavedGranted] = useState<WorkspacePermission[]>([])
+  const [savedDenied, setSavedDenied] = useState<WorkspacePermission[]>([])
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
@@ -77,9 +85,13 @@ function AccessControl() {
       if (!selectedMemberId) {
         const first = items.find((item) => item.userId !== currentMember?.userId) ?? items[0]
         if (first) {
+          const nextGranted = first.grantedPermissions ?? []
+          const nextDenied = first.deniedPermissions ?? []
           setSelectedMemberId(first.userId)
-          setGranted(first.grantedPermissions ?? [])
-          setDenied(first.deniedPermissions ?? [])
+          setGranted(nextGranted)
+          setDenied(nextDenied)
+          setSavedGranted(nextGranted)
+          setSavedDenied(nextDenied)
         }
       }
     }).catch((loadError: unknown) => {
@@ -92,9 +104,13 @@ function AccessControl() {
       if (!selectedMemberId) {
         const first = items.find((item) => item.userId !== currentMember?.userId) ?? items[0]
         if (first) {
+          const nextGranted = first.grantedPermissions ?? []
+          const nextDenied = first.deniedPermissions ?? []
           setSelectedMemberId(first.userId)
-          setGranted(first.grantedPermissions ?? [])
-          setDenied(first.deniedPermissions ?? [])
+          setGranted(nextGranted)
+          setDenied(nextDenied)
+          setSavedGranted(nextGranted)
+          setSavedDenied(nextDenied)
         }
       }
     }, (listenError) => {
@@ -106,21 +122,27 @@ function AccessControl() {
 
   const selectedMember = useMemo(() => members.find((item) => item.userId === selectedMemberId) ?? null, [members, selectedMemberId])
   const selectedPermissions = useMemo(() => new Set([...getRolePermissions(selectedMember?.role ?? 'viewer'), ...granted].filter((permission) => !denied.includes(permission))), [selectedMember?.role, granted, denied])
+  const hasChanges = !samePermissions(granted, savedGranted) || !samePermissions(denied, savedDenied)
   const totalPermissions = ALL_PERMISSIONS.length
 
   function selectMember(userId: string) {
     const next = members.find((item) => item.userId === userId)
+    const nextGranted = next?.grantedPermissions ?? []
+    const nextDenied = next?.deniedPermissions ?? []
     setSelectedMemberId(userId)
-    setGranted(next?.grantedPermissions ?? [])
-    setDenied(next?.deniedPermissions ?? [])
+    setGranted(nextGranted)
+    setDenied(nextDenied)
+    setSavedGranted(nextGranted)
+    setSavedDenied(nextDenied)
     setMessage('')
     setError('')
   }
 
   function togglePermission(permission: WorkspacePermission) {
-    if (!selectedMember || selectedMember.role === 'owner') return
+    if (!selectedMember || selectedMember.role === 'owner' || saving) return
     const state = getPermissionState({ ...selectedMember, grantedPermissions: granted, deniedPermissions: denied }, permission)
     setMessage('')
+    setError('')
     if (state === 'inherited') {
       setDenied((current) => current.includes(permission) ? current : [...current, permission])
       setGranted((current) => current.filter((item) => item !== permission))
@@ -135,7 +157,7 @@ function AccessControl() {
   }
 
   function resetToRoleDefaults() {
-    if (!selectedMember || selectedMember.role === 'owner') return
+    if (!selectedMember || selectedMember.role === 'owner' || saving) return
     setGranted([])
     setDenied([])
     setMessage('Custom overrides cleared. Save to restore this member to the role defaults.')
@@ -143,7 +165,7 @@ function AccessControl() {
   }
 
   function grantAllPermissions() {
-    if (!selectedMember || selectedMember.role === 'owner') return
+    if (!selectedMember || selectedMember.role === 'owner' || saving) return
     const rolePermissions = new Set(getRolePermissions(selectedMember.role))
     setGranted(ALL_PERMISSIONS.filter((permission) => !rolePermissions.has(permission)))
     setDenied([])
@@ -152,7 +174,7 @@ function AccessControl() {
   }
 
   function denyAllOptionalPermissions() {
-    if (!selectedMember || selectedMember.role === 'owner') return
+    if (!selectedMember || selectedMember.role === 'owner' || saving) return
     const rolePermissions = getRolePermissions(selectedMember.role)
     setGranted([])
     setDenied([...rolePermissions])
@@ -161,15 +183,27 @@ function AccessControl() {
   }
 
   async function savePermissions() {
-    if (!workspace?.id || !selectedMember || selectedMember.role === 'owner') return
-    setSaving(true); setError(''); setMessage('')
+    if (!workspace?.id || !selectedMember || selectedMember.role === 'owner' || saving || !hasChanges) return
+    const memberName = selectedMember.displayName || selectedMember.email || 'this member'
+    const nextGranted = [...granted]
+    const nextDenied = [...denied]
+    setSaving(true)
+    setError('')
+    setMessage('Saving permission changes…')
     try {
-      await updateMemberPermissions(workspace.id, selectedMember.userId, granted, denied)
-      setMembers((current) => current.map((item) => item.userId === selectedMember.userId ? { ...item, grantedPermissions: granted, deniedPermissions: denied } : item))
-      setMessage(`Permissions saved for ${selectedMember.displayName || selectedMember.email || 'this member'}.`)
+      await updateMemberPermissions(workspace.id, selectedMember.userId, nextGranted, nextDenied)
+      setMembers((current) => current.map((item) => item.userId === selectedMember.userId ? { ...item, grantedPermissions: nextGranted, deniedPermissions: nextDenied } : item))
+      setGranted(nextGranted)
+      setDenied(nextDenied)
+      setSavedGranted(nextGranted)
+      setSavedDenied(nextDenied)
+      setMessage(`Permissions saved successfully for ${memberName}.`)
     } catch (saveError: unknown) {
-      setError(saveError instanceof Error ? saveError.message : 'Unable to save permissions.')
-    } finally { setSaving(false) }
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save permissions. Please try again.')
+      setMessage('')
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (!canManage) {
@@ -179,16 +213,16 @@ function AccessControl() {
   return (
     <div className="mx-auto w-full max-w-[1400px] p-4 sm:p-6 lg:p-8">
       <section className="mb-8"><p className="mb-2 text-sm font-medium text-[var(--os-accent)]">System / Access control</p><h1 className="text-3xl font-semibold tracking-tight text-[var(--os-text)] sm:text-4xl">Roles & permissions</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--os-text-secondary)]">Role defaults are only the starting point. Owners and authorized admins can customize access for each active member with explicit grants or denials.</p></section>
-      <Card className="mb-6 p-5 sm:p-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-center gap-3"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--os-accent-soft)] text-[var(--os-accent)]"><UserCheck size={20} /></div><div><h2 className="text-base font-semibold text-[var(--os-text)]">Customize a member</h2><p className="mt-1 text-sm text-[var(--os-text-secondary)]">Choose an active member, then tick or revoke individual capabilities.</p></div></div><div className="relative w-full lg:max-w-md"><UserRound size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--os-text-muted)]" /><select value={selectedMemberId} onChange={(event) => selectMember(event.target.value)} disabled={loading} className="os-focus-ring h-11 w-full appearance-none rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] pl-10 pr-10 text-sm text-[var(--os-text)]">{members.map((item) => <option key={item.userId} value={item.userId}>{item.displayName || item.email || 'Unnamed member'} — {roleLabel(item.role)}</option>)}</select><ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--os-text-muted)]" /></div></div></Card>
+      <Card className="mb-6 p-5 sm:p-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-center gap-3"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--os-accent-soft)] text-[var(--os-accent)]"><UserCheck size={20} /></div><div><h2 className="text-base font-semibold text-[var(--os-text)]">Customize a member</h2><p className="mt-1 text-sm text-[var(--os-text-secondary)]">Choose an active member, then tick or revoke individual capabilities.</p></div></div><div className="relative w-full lg:max-w-md"><UserRound size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--os-text-muted)]" /><select value={selectedMemberId} onChange={(event) => selectMember(event.target.value)} disabled={loading || saving} className="os-focus-ring h-11 w-full appearance-none rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] pl-10 pr-10 text-sm text-[var(--os-text)]">{members.map((item) => <option key={item.userId} value={item.userId}>{item.displayName || item.email || 'Unnamed member'} — {roleLabel(item.role)}</option>)}</select><ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[var(--os-text-muted)]" /></div></div></Card>
       {error && <div role="alert" className="mb-5 rounded-xl border border-[rgba(255,100,124,0.25)] bg-[rgba(255,100,124,0.08)] px-4 py-3 text-sm text-[var(--os-danger)]">{error}</div>}
       {message && <div role="status" className="mb-5 rounded-xl border border-[rgba(74,222,128,0.25)] bg-[rgba(74,222,128,0.08)] px-4 py-3 text-sm text-[var(--os-success)]">{message}</div>}
       {selectedMember && <>
         <Card className="mb-6 p-5 sm:p-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div className="flex items-center gap-3"><ShieldCheck size={21} className="text-[var(--os-accent)]" /><div><h2 className="text-lg font-semibold text-[var(--os-text)]">{selectedMember.displayName || selectedMember.email || 'Unnamed member'}</h2><p className="mt-1 text-sm text-[var(--os-text-secondary)]">{selectedMember.email || 'No email'} · {roleLabel(selectedMember.role)}</p></div></div><div className="flex flex-wrap gap-2 text-xs"><span className="rounded-full border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 py-1.5 text-[var(--os-text-secondary)]">{selectedPermissions.size} / {totalPermissions} effective</span><span className="rounded-full border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 py-1.5 text-[var(--os-text-secondary)]">{granted.length} custom grants</span><span className="rounded-full border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 py-1.5 text-[var(--os-text-secondary)]">{denied.length} custom denials</span></div></div></Card>
         {selectedMember.role === 'owner' && <div className="mb-6 rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-4 py-3 text-sm text-[var(--os-text-secondary)]">The workspace owner has full control and cannot be restricted from this screen.</div>}
-        {selectedMember.role !== 'owner' && <Card className="mb-5 p-4"><div className="flex flex-wrap gap-2"><button type="button" onClick={grantAllPermissions} className="os-focus-ring rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 py-2 text-xs font-semibold text-[var(--os-text)]">Grant all</button><button type="button" onClick={denyAllOptionalPermissions} className="os-focus-ring rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 py-2 text-xs font-semibold text-[var(--os-text)]">Remove role access</button><button type="button" onClick={resetToRoleDefaults} className="os-focus-ring rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 py-2 text-xs font-semibold text-[var(--os-text)]">Reset to role defaults</button><span className="self-center text-xs text-[var(--os-text-muted)]">Use individual permissions below for precise custom access.</span></div></Card>}
+        {selectedMember.role !== 'owner' && <Card className="mb-5 p-4"><div className="flex flex-wrap gap-2"><button type="button" onClick={grantAllPermissions} disabled={saving} className="os-focus-ring rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 py-2 text-xs font-semibold text-[var(--os-text)] disabled:opacity-50">Grant all</button><button type="button" onClick={denyAllOptionalPermissions} disabled={saving} className="os-focus-ring rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 py-2 text-xs font-semibold text-[var(--os-text)] disabled:opacity-50">Remove role access</button><button type="button" onClick={resetToRoleDefaults} disabled={saving} className="os-focus-ring rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 py-2 text-xs font-semibold text-[var(--os-text)] disabled:opacity-50">Reset to role defaults</button><span className="self-center text-xs text-[var(--os-text-muted)]">Use individual permissions below for precise custom access.</span></div></Card>}
         <div className="mb-5 flex flex-wrap items-center gap-3 text-xs text-[var(--os-text-secondary)]"><span className="rounded-full bg-[var(--os-success-soft)] px-3 py-1.5 text-[var(--os-success)]">Inherited = role default</span><span className="rounded-full bg-[var(--os-accent-soft)] px-3 py-1.5 text-[var(--os-accent)]">Granted = custom access</span><span className="rounded-full bg-[var(--os-danger-soft)] px-3 py-1.5 text-[var(--os-danger)]">Denied = explicitly blocked</span></div>
-        <div className="space-y-6">{permissionGroups.map((group) => <Card key={group.label} className="overflow-hidden"><div className="border-b border-[var(--os-border)] px-5 py-4 sm:px-6"><h3 className="text-sm font-semibold text-[var(--os-text)]">{group.label}</h3></div><div className="divide-y divide-[var(--os-border)]">{group.permissions.map((permission) => { const state = getPermissionState({ ...selectedMember, grantedPermissions: granted, deniedPermissions: denied }, permission); const effective = selectedPermissions.has(permission.key); const disabled = selectedMember.role === 'owner'; return <button key={permission.key} type="button" disabled={disabled} onClick={() => togglePermission(permission.key)} className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-[var(--os-surface-hover)] disabled:cursor-not-allowed sm:px-6"><div className="min-w-0"><p className="text-sm font-medium text-[var(--os-text)]">{permission.label}</p><p className="mt-1 text-xs leading-5 text-[var(--os-text-muted)]">{permission.description}</p><p className="mt-1 font-mono text-[10px] text-[var(--os-text-muted)]">{permission.key}</p></div><div className="flex shrink-0 items-center gap-2"><span className={`hidden rounded-full px-2.5 py-1 text-[10px] font-semibold sm:inline-flex ${state === 'inherited' ? 'bg-[var(--os-success-soft)] text-[var(--os-success)]' : state === 'granted' ? 'bg-[var(--os-accent-soft)] text-[var(--os-accent)]' : state === 'denied' ? 'bg-[var(--os-danger-soft)] text-[var(--os-danger)]' : 'bg-[var(--os-surface-hover)] text-[var(--os-text-muted)]'}`}>{state}</span><span className={`flex h-9 w-9 items-center justify-center rounded-xl border ${effective ? 'border-[var(--os-success)]/30 bg-[var(--os-success-soft)] text-[var(--os-success)]' : 'border-[var(--os-border)] bg-[var(--os-surface-raised)] text-[var(--os-text-muted)]'}`}>{effective ? <Check size={16} /> : <span className="text-xs">—</span>}</span></div></button> })}</div></Card>)}</div>
-        <div className="sticky bottom-4 z-10 mt-6 flex justify-end"><button type="button" onClick={() => void savePermissions()} disabled={saving || selectedMember.role === 'owner'} className="os-focus-ring inline-flex h-11 items-center justify-center rounded-xl bg-[var(--os-accent)] px-5 text-sm font-semibold text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-60">{saving ? 'Saving permissions…' : 'Save permission changes'}</button></div>
+        <div className="space-y-6">{permissionGroups.map((group) => <Card key={group.label} className="overflow-hidden"><div className="border-b border-[var(--os-border)] px-5 py-4 sm:px-6"><h3 className="text-sm font-semibold text-[var(--os-text)]">{group.label}</h3></div><div className="divide-y divide-[var(--os-border)]">{group.permissions.map((permission) => { const state = getPermissionState({ ...selectedMember, grantedPermissions: granted, deniedPermissions: denied }, permission); const effective = selectedPermissions.has(permission.key); const disabled = selectedMember.role === 'owner' || saving; return <button key={permission.key} type="button" disabled={disabled} onClick={() => togglePermission(permission.key)} className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-[var(--os-surface-hover)] disabled:cursor-not-allowed disabled:opacity-70 sm:px-6"><div className="min-w-0"><p className="text-sm font-medium text-[var(--os-text)]">{permission.label}</p><p className="mt-1 text-xs leading-5 text-[var(--os-text-muted)]">{permission.description}</p><p className="mt-1 font-mono text-[10px] text-[var(--os-text-muted)]">{permission.key}</p></div><div className="flex shrink-0 items-center gap-2"><span className={`hidden rounded-full px-2.5 py-1 text-[10px] font-semibold sm:inline-flex ${state === 'inherited' ? 'bg-[var(--os-success-soft)] text-[var(--os-success)]' : state === 'granted' ? 'bg-[var(--os-accent-soft)] text-[var(--os-accent)]' : state === 'denied' ? 'bg-[var(--os-danger-soft)] text-[var(--os-danger)]' : 'bg-[var(--os-surface-hover)] text-[var(--os-text-muted)]'}`}>{state}</span><span className={`flex h-9 w-9 items-center justify-center rounded-xl border ${effective ? 'border-[var(--os-success)]/30 bg-[var(--os-success-soft)] text-[var(--os-success)]' : 'border-[var(--os-border)] bg-[var(--os-surface-raised)] text-[var(--os-text-muted)]'}`}>{effective ? <Check size={16} /> : <span className="text-xs">—</span>}</span></div></button> })}</div></Card>)}</div>
+        <div className="sticky bottom-4 z-10 mt-6 flex justify-end"><button type="button" onClick={() => void savePermissions()} disabled={saving || selectedMember.role === 'owner' || !hasChanges} className="os-focus-ring inline-flex h-11 min-w-[190px] items-center justify-center rounded-xl bg-[var(--os-accent)] px-5 text-sm font-semibold text-white shadow-lg transition-opacity disabled:cursor-not-allowed disabled:opacity-60">{saving ? 'Saving permissions…' : hasChanges ? 'Save permission changes' : 'Permissions saved'}</button></div>
       </>}
     </div>
   )
