@@ -46,7 +46,7 @@ service cloud.firestore {
         (permission == 'documents.view' && userRole(workspaceId) in ['owner','admin','manager','member','intern','viewer']) ||
         (permission == 'analytics.view' && userRole(workspaceId) in ['owner','admin','manager','member','viewer']) ||
         (permission == 'settings.manage' && userRole(workspaceId) in ['owner','admin']) ||
-        (get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions)
+        (!(permission in ['members.manage', 'settings.manage']) && get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions)
       ) && !(get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions);
     }
 
