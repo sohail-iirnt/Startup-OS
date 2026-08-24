@@ -16,6 +16,7 @@ service cloud.firestore {
     function canManageTasks(workspaceId) { return hasPermission(workspaceId, 'tasks.delete'); }
     function canCreateTasks(workspaceId) { return hasPermission(workspaceId, 'tasks.create'); }
     function canCreateProjects(workspaceId) { return hasPermission(workspaceId, 'projects.create'); }
+    function canInviteRole(workspaceId, role) { return isOwner(workspaceId) || isAdmin(workspaceId) ? role in ['admin', 'manager', 'member', 'intern', 'viewer'] : role in ['member', 'intern', 'viewer']; }
 
     // Effective permission = role baseline + explicit grants - explicit denials.
     // Access-control administration remains owner/admin-only and is separate from
@@ -67,7 +68,7 @@ service cloud.firestore {
         allow delete: if false;
       }
       match /invitations/{invitationId} {
-        allow create: if canApproveMembers(workspaceId) && request.resource.data.workspaceId == workspaceId && request.resource.data.createdBy == request.auth.uid && request.resource.data.token == invitationId && request.resource.data.role in ['admin', 'manager', 'member', 'intern', 'viewer'] && request.resource.data.status == 'pending';
+        allow create: if canApproveMembers(workspaceId) && canInviteRole(workspaceId, request.resource.data.role) && request.resource.data.workspaceId == workspaceId && request.resource.data.createdBy == request.auth.uid && request.resource.data.token == invitationId && request.resource.data.status == 'pending';
         allow get: if resource.data.workspaceId == workspaceId && resource.data.token == invitationId && resource.data.status == 'pending' && resource.data.expiresAt > request.time;
         allow list: if canApproveMembers(workspaceId);
         allow update: if (canApproveMembers(workspaceId) && request.resource.data.workspaceId == resource.data.workspaceId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'revokedAt'])) || (signedIn() && resource.data.workspaceId == workspaceId && resource.data.token == invitationId && resource.data.status == 'pending' && resource.data.expiresAt > request.time && (resource.data.email == null || resource.data.email == request.auth.token.email) && request.resource.data.status == 'accepted' && request.resource.data.acceptedBy == request.auth.uid && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'acceptedBy', 'acceptedAt']));
