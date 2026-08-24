@@ -19,8 +19,7 @@ service cloud.firestore {
     function canInviteRole(workspaceId, role) { return isOwner(workspaceId) || isAdmin(workspaceId) ? role in ['admin', 'manager', 'member', 'intern', 'viewer'] : role in ['member', 'intern', 'viewer']; }
 
     // Effective permission = role baseline + explicit grants - explicit denials.
-    // Access-control administration remains owner/admin-only and is separate from
-    // ordinary member-management permissions so access cannot be escalated.
+    // Privileged access-management capabilities remain owner/admin-only.
     function hasPermission(workspaceId, permission) {
       return hasActiveMembership(workspaceId) && (
         (permission == 'workspace.view' && userRole(workspaceId) in ['owner','admin','manager','member','intern','viewer']) ||
@@ -52,7 +51,7 @@ service cloud.firestore {
       ) && !(get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions);
     }
 
-    function canUpdateOwnTask(workspaceId, taskId) { return hasActiveMembership(workspaceId) && userRole(workspaceId) in ['member', 'intern'] && get(/databases/$(database)/documents/tasks/$(taskId)).data.assigneeId == request.auth.uid && hasPermission(workspaceId, 'tasks.update'); }
+    function canUpdateOwnTask(workspaceId, taskId) { return hasActiveMembership(workspaceId) && userRole(workspaceId) == 'intern' && get(/databases/$(database)/documents/tasks/$(taskId)).data.assigneeId == request.auth.uid && hasPermission(workspaceId, 'tasks.update'); }
     function canUpdateOwnProject(workspaceId, projectId) { return hasActiveMembership(workspaceId) && userRole(workspaceId) == 'intern' && hasPermission(workspaceId, 'projects.update') && ((get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid) || (get(/databases/$(database)/documents/projects/$(projectId)).data.keys().hasAll(['memberIds']) && request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.memberIds)); }
     function canApproveMemberUpdate(workspaceId) { return canApproveMembers(workspaceId) && request.resource.data.role in (isOwner(workspaceId) || isAdmin(workspaceId) ? ['admin', 'manager', 'member', 'intern', 'viewer'] : ['member', 'intern', 'viewer']) && request.resource.data.status == 'active'; }
 
@@ -79,8 +78,18 @@ service cloud.firestore {
     match /calendarEvents/{eventId} { allow create: if signedIn() && request.resource.data.workspaceId is string && hasPermission(request.resource.data.workspaceId, 'calendar.manage') && request.resource.data.createdBy == request.auth.uid; allow read: if hasPermission(resource.data.workspaceId, 'calendar.view'); allow update: if hasPermission(resource.data.workspaceId, 'calendar.manage') && resource.data.workspaceId == request.resource.data.workspaceId; allow delete: if hasPermission(resource.data.workspaceId, 'calendar.manage'); }
     match /websites/{websiteId} { allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && hasPermission(request.resource.data.workspaceId, 'websites.manage'); allow read: if hasPermission(resource.data.workspaceId, 'websites.view'); allow update: if hasPermission(resource.data.workspaceId, 'websites.manage') && resource.data.workspaceId == request.resource.data.workspaceId; allow delete: if hasPermission(resource.data.workspaceId, 'websites.manage'); }
     match /clients/{clientId} { allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && hasPermission(request.resource.data.workspaceId, 'clients.manage'); allow read: if hasPermission(resource.data.workspaceId, 'clients.view'); allow update: if hasPermission(resource.data.workspaceId, 'clients.manage') && resource.data.workspaceId == request.resource.data.workspaceId; allow delete: if hasPermission(resource.data.workspaceId, 'clients.manage'); }
-    match /projects/{projectId} { allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && canCreateProjects(request.resource.data.workspaceId) && (userRole(request.resource.data.workspaceId) != 'intern' || (request.resource.data.ownerId == request.auth.uid && request.resource.data.memberIds is list && request.auth.uid in request.resource.data.memberIds)); allow read: if hasPermission(resource.data.workspaceId, 'projects.view') || (hasRole(resource.data.workspaceId, 'intern') && ((resource.data.ownerId == request.auth.uid) || (resource.data.keys().hasAll(['memberIds']) && request.auth.uid in resource.data.memberIds))); allow update: if resource.data.workspaceId == request.resource.data.workspaceId && (hasPermission(resource.data.workspaceId, 'projects.update') || canUpdateOwnProject(resource.data.workspaceId, projectId)); allow delete: if hasPermission(resource.data.workspaceId, 'projects.delete'); }
-    match /tasks/{taskId} { allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && request.resource.data.createdBy == request.auth.uid && canCreateTasks(request.resource.data.workspaceId); allow read: if hasPermission(resource.data.workspaceId, 'tasks.view') || (hasRole(resource.data.workspaceId, 'intern') && resource.data.assigneeId == request.auth.uid); allow update: if resource.data.workspaceId == request.resource.data.workspaceId && (hasPermission(resource.data.workspaceId, 'tasks.update') || canUpdateOwnTask(resource.data.workspaceId, taskId)); allow delete: if hasPermission(resource.data.workspaceId, 'tasks.delete'); }
+    match /projects/{projectId} {
+      allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && canCreateProjects(request.resource.data.workspaceId) && (userRole(request.resource.data.workspaceId) != 'intern' || (request.resource.data.ownerId == request.auth.uid && request.resource.data.memberIds is list && request.auth.uid in request.resource.data.memberIds));
+      allow read: if (userRole(resource.data.workspaceId) == 'intern' ? ((resource.data.ownerId == request.auth.uid) || (resource.data.keys().hasAll(['memberIds']) && request.auth.uid in resource.data.memberIds)) : hasPermission(resource.data.workspaceId, 'projects.view'));
+      allow update: if resource.data.workspaceId == request.resource.data.workspaceId && (userRole(resource.data.workspaceId) == 'intern' ? canUpdateOwnProject(resource.data.workspaceId, projectId) : hasPermission(resource.data.workspaceId, 'projects.update'));
+      allow delete: if hasPermission(resource.data.workspaceId, 'projects.delete');
+    }
+    match /tasks/{taskId} {
+      allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && request.resource.data.createdBy == request.auth.uid && canCreateTasks(request.resource.data.workspaceId);
+      allow read: if (userRole(resource.data.workspaceId) == 'intern' ? resource.data.assigneeId == request.auth.uid : hasPermission(resource.data.workspaceId, 'tasks.view'));
+      allow update: if resource.data.workspaceId == request.resource.data.workspaceId && (userRole(resource.data.workspaceId) == 'intern' ? canUpdateOwnTask(resource.data.workspaceId, taskId) : hasPermission(resource.data.workspaceId, 'tasks.update'));
+      allow delete: if hasPermission(resource.data.workspaceId, 'tasks.delete');
+    }
     match /{document=**} { allow read, write: if false; }
   }
 }
