@@ -5,11 +5,24 @@ import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import SectionHeader from '../components/ui/SectionHeader'
+import ThemeSelect from '../components/ui/ThemeSelect'
 import { useAuth } from '../context/useAuth'
 import { useWorkspace } from '../context/useWorkspace'
 import { db } from '../lib/firebase'
 
 type CalendarEvent = { id: string; title: string; date: string; time: string; type: string; notes: string }
+
+type Option = { value: string; label: string }
+
+const eventTypeOptions: Option[] = [
+  { value: 'meeting', label: 'Meeting' },
+  { value: 'deadline', label: 'Deadline' },
+  { value: 'renewal', label: 'Renewal' },
+  { value: 'reminder', label: 'Reminder' },
+  { value: 'other', label: 'Other' },
+]
+
+const today = () => new Date().toISOString().slice(0, 10)
 
 export default function Calendar() {
   const { user } = useAuth()
@@ -20,11 +33,18 @@ export default function Calendar() {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<CalendarEvent | null>(null)
-  const [form, setForm] = useState({ title: '', date: new Date().toISOString().slice(0, 10), time: '10:00', type: 'meeting', notes: '' })
+  const [form, setForm] = useState({ title: '', date: today(), time: '10:00', type: 'meeting', notes: '' })
 
   useEffect(() => {
     if (loading || !workspace?.id) return undefined
-    return onSnapshot(query(collection(db, 'calendarEvents'), where('workspaceId', '==', workspace.id)), snapshot => setEvents(snapshot.docs.map(item => { const d = item.data(); return { id: item.id, title: String(d.title ?? ''), date: String(d.date ?? ''), time: String(d.time ?? ''), type: String(d.type ?? 'event'), notes: String(d.notes ?? '') } }).sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))), e => { console.error(e); setError('Calendar data could not be loaded.') })
+    return onSnapshot(
+      query(collection(db, 'calendarEvents'), where('workspaceId', '==', workspace.id)),
+      snapshot => setEvents(snapshot.docs.map(item => {
+        const d = item.data()
+        return { id: item.id, title: String(d.title ?? ''), date: String(d.date ?? ''), time: String(d.time ?? ''), type: String(d.type ?? 'event'), notes: String(d.notes ?? '') }
+      }).sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`))),
+      e => { console.error(e); setError('Calendar data could not be loaded.') },
+    )
   }, [workspace?.id, loading])
 
   const upcoming = useMemo(() => events.filter(e => `${e.date}T${e.time}` >= new Date().toISOString().slice(0, 16)).slice(0, 20), [events])
@@ -33,7 +53,10 @@ export default function Calendar() {
     event.preventDefault()
     if (!workspace?.id || !user?.uid || !canManage || !form.title.trim()) return
     setSaving(true); setError('')
-    try { await addDoc(collection(db, 'calendarEvents'), { workspaceId: workspace.id, title: form.title.trim(), date: form.date, time: form.time, type: form.type, notes: form.notes.trim(), createdBy: user.uid }); setForm({ title: '', date: new Date().toISOString().slice(0, 10), time: '10:00', type: 'meeting', notes: '' }) } catch (e) { console.error(e); setError('Could not create the event.') } finally { setSaving(false) }
+    try {
+      await addDoc(collection(db, 'calendarEvents'), { workspaceId: workspace.id, title: form.title.trim(), date: form.date, time: form.time, type: form.type, notes: form.notes.trim(), createdBy: user.uid })
+      setForm({ title: '', date: today(), time: '10:00', type: 'meeting', notes: '' })
+    } catch (e) { console.error(e); setError('Could not create the event.') } finally { setSaving(false) }
   }
 
   async function removeEvent() {
@@ -43,7 +66,14 @@ export default function Calendar() {
   }
 
   return <>
-    <div className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 lg:p-8"><div className="mb-8"><p className="mb-2 text-sm font-medium text-[var(--os-accent)]">Operations Calendar</p><h1 className="text-3xl font-semibold tracking-tight text-[var(--os-text)] sm:text-4xl">Calendar</h1><p className="mt-2 text-sm text-[var(--os-text-secondary)]">Bring meetings, deadlines, renewals and important business dates into one workspace timeline.</p></div>{error && <div role="alert" className="mb-6 rounded-xl border border-[rgba(255,100,124,0.25)] bg-[rgba(255,100,124,0.08)] px-4 py-3 text-sm text-[var(--os-danger)]">{error}</div>}<div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">{canManage ? <Card className="p-6"><SectionHeader title="Add event" description="Create a meeting, deadline or reminder." /><form onSubmit={addEvent} className="mt-5 space-y-3"><input required placeholder="Event title" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className="w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-4 py-3 text-sm text-[var(--os-text)] outline-none" /><div className="grid grid-cols-2 gap-3"><input required type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className="w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-4 py-3 text-sm text-[var(--os-text)] outline-none" /><input required type="time" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} className="w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-4 py-3 text-sm text-[var(--os-text)] outline-none" /></div><select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} className="w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-4 py-3 text-sm text-[var(--os-text)] outline-none"><option value="meeting">Meeting</option><option value="deadline">Deadline</option><option value="renewal">Renewal</option><option value="reminder">Reminder</option><option value="other">Other</option></select><textarea rows={4} placeholder="Notes" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="w-full resize-none rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-4 py-3 text-sm text-[var(--os-text)] outline-none" /><Button type="submit" disabled={saving} className="w-full"><Plus size={17}/>{saving ? 'Saving…' : 'Add event'}</Button></form></Card> : <Card className="p-6"><SectionHeader title="Calendar overview" description="Read-only calendar access" /><p className="mt-5 text-sm text-[var(--os-text-secondary)]">You can view workspace events. Authorized managers can create and remove events.</p></Card>}<Card className="p-6"><SectionHeader title="Upcoming" description={`${upcoming.length} upcoming events`} />{upcoming.length === 0 ? <div className="mt-6 rounded-2xl border border-dashed border-[var(--os-border)] p-10 text-center"><CalendarDays className="mx-auto text-[var(--os-text-muted)]" size={30}/><p className="mt-3 text-sm font-medium text-[var(--os-text)]">Your calendar is clear</p><p className="mt-1 text-xs text-[var(--os-text-muted)]">Add meetings and important business dates as they arise.</p></div> : <div className="mt-5 space-y-2">{upcoming.map(item => <div key={item.id} className="flex items-start justify-between gap-4 rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] p-4"><div className="flex min-w-0 gap-3"><span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--os-accent-soft)] text-[var(--os-accent)]"><CalendarDays size={17}/></span><div className="min-w-0"><p className="truncate text-sm font-semibold text-[var(--os-text)]">{item.title}</p><p className="mt-1 text-xs capitalize text-[var(--os-text-muted)]">{item.type} · {item.date}</p>{item.notes && <p className="mt-2 text-xs text-[var(--os-text-secondary)]">{item.notes}</p>}</div></div><div className="flex shrink-0 items-center gap-2"><span className="inline-flex items-center gap-1 text-xs text-[var(--os-text-muted)]"><Clock3 size={13}/>{item.time}</span>{canManage && <button type="button" aria-label={`Delete ${item.title}`} onClick={() => setDeleteTarget(item)} className="rounded-lg p-2 text-[var(--os-text-muted)] hover:bg-[var(--os-danger-soft)] hover:text-[var(--os-danger)]"><Trash2 size={15}/></button>}</div></div>)}</div>}</Card></div></div>
+    <div className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 lg:p-8">
+      <div className="mb-8"><p className="mb-2 text-sm font-medium text-[var(--os-accent)]">Operations Calendar</p><h1 className="text-3xl font-semibold tracking-tight text-[var(--os-text)] sm:text-4xl">Calendar</h1><p className="mt-2 text-sm text-[var(--os-text-secondary)]">Bring meetings, deadlines, renewals and important business dates into one workspace timeline.</p></div>
+      {error && <div role="alert" className="mb-6 rounded-xl border border-[rgba(255,100,124,0.25)] bg-[rgba(255,100,124,0.08)] px-4 py-3 text-sm text-[var(--os-danger)]">{error}</div>}
+      <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
+        {canManage ? <Card className="p-6"><SectionHeader title="Add event" description="Create a meeting, deadline or reminder." /><form onSubmit={addEvent} className="mt-5 space-y-3"><input required placeholder="Event title" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className="w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-4 py-3 text-sm text-[var(--os-text)] outline-none" /><div className="grid grid-cols-2 gap-3"><input required type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} className="w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-4 py-3 text-sm text-[var(--os-text)] outline-none" /><input required type="time" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} className="w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-4 py-3 text-sm text-[var(--os-text)] outline-none" /></div><ThemeSelect value={form.type} onChange={value => setForm(f => ({ ...f, type: value }))} options={eventTypeOptions} placeholder="Select event type" /><textarea rows={4} placeholder="Notes" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} className="w-full resize-none rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-4 py-3 text-sm text-[var(--os-text)] outline-none" /><Button type="submit" disabled={saving} className="w-full"><Plus size={17}/>{saving ? 'Saving…' : 'Add event'}</Button></form></Card> : <Card className="p-6"><SectionHeader title="Calendar overview" description="Read-only calendar access" /><p className="mt-5 text-sm text-[var(--os-text-secondary)]">You can view workspace events. Authorized managers can create and remove events.</p></Card>}
+        <Card className="p-6"><SectionHeader title="Upcoming" description={`${upcoming.length} upcoming events`} />{upcoming.length === 0 ? <div className="mt-6 rounded-2xl border border-dashed border-[var(--os-border)] p-10 text-center"><CalendarDays className="mx-auto text-[var(--os-text-muted)]" size={30}/><p className="mt-3 text-sm font-medium text-[var(--os-text)]">Your calendar is clear</p><p className="mt-1 text-xs text-[var(--os-text-muted)]">Add meetings and important business dates as they arise.</p></div> : <div className="mt-5 space-y-2">{upcoming.map(item => <div key={item.id} className="flex items-start justify-between gap-4 rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] p-4"><div className="flex min-w-0 gap-3"><span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--os-accent-soft)] text-[var(--os-accent)]"><CalendarDays size={17}/></span><div className="min-w-0"><p className="truncate text-sm font-semibold text-[var(--os-text)]">{item.title}</p><p className="mt-1 text-xs capitalize text-[var(--os-text-muted)]">{item.type} · {item.date}</p>{item.notes && <p className="mt-2 text-xs text-[var(--os-text-secondary)]">{item.notes}</p>}</div></div><div className="flex shrink-0 items-center gap-2"><span className="inline-flex items-center gap-1 text-xs text-[var(--os-text-muted)]"><Clock3 size={13}/>{item.time}</span>{canManage && <button type="button" aria-label={`Delete ${item.title}`} onClick={() => setDeleteTarget(item)} className="rounded-lg p-2 text-[var(--os-text-muted)] hover:bg-[var(--os-danger-soft)] hover:text-[var(--os-danger)]"><Trash2 size={15}/></button>}</div></div>)}</div>}</Card>
+      </div>
+    </div>
     <ConfirmDialog open={Boolean(deleteTarget)} title="Delete calendar event?" description={deleteTarget ? `“${deleteTarget.title}” will be permanently removed from this workspace calendar.` : ''} confirmLabel="Delete event" loading={deleting} onCancel={() => { if (!deleting) setDeleteTarget(null) }} onConfirm={() => void removeEvent()} />
   </>
 }
