@@ -9,13 +9,11 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
-
   color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
   --os-bg: #08090c;
   --os-surface: #0d0f13;
   --os-surface-raised: #12151b;
@@ -79,8 +77,7 @@ input, textarea, select {
   color-scheme: dark !important;
 }
 
-/* Native form controls are deliberately forced into the Startup OS dark palette.
-   Chromium/Windows can otherwise paint the opened option list with a white native theme. */
+/* Keep every native form control visually inside the Startup OS palette. */
 select {
   appearance: auto;
   background-color: var(--os-surface-raised) !important;
@@ -104,6 +101,24 @@ select option:focus {
   color: #ffffff !important;
 }
 input::placeholder, textarea::placeholder { color: var(--os-text-muted); }
+input:disabled, textarea:disabled, select:disabled { opacity: 0.58; cursor: not-allowed; }
+input[type="date"], input[type="time"], input[type="datetime-local"] { color-scheme: dark; }
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator { filter: invert(0.8); opacity: 0.72; cursor: pointer; }
+input[type="number"] { appearance: textfield; -moz-appearance: textfield; }
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button { margin: 0; opacity: 0.55; }
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+textarea:-webkit-autofill:hover,
+textarea:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--os-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--os-surface-raised) inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
 ::selection { background: rgba(139, 124, 255, 0.35); color: #ffffff; }
 :focus-visible { outline: 2px solid var(--os-accent); outline-offset: 2px; }
 
