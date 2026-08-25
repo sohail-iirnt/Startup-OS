@@ -1,4 +1,4 @@
-import { collection, doc, onSnapshot, query, serverTimestamp, setDoc, where, type Unsubscribe } from 'firebase/firestore'
+import { collection, doc, getDoc, onSnapshot, query, serverTimestamp, setDoc, where, type Unsubscribe } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import type { AttendanceRecord, AttendanceStatus } from '../types/attendance'
 
@@ -25,7 +25,7 @@ export function subscribeToAttendance(workspaceId: string, startDate: string, en
         workspaceId: String(data.workspaceId ?? workspaceId),
         userId: String(data.userId ?? ''),
         date: String(data.date ?? ''),
-        status: (String(data.status ?? 'present') as AttendanceStatus),
+        status: String(data.status ?? 'present') as AttendanceStatus,
         checkIn: data.checkIn ? toDate(data.checkIn) : undefined,
         checkOut: data.checkOut ? toDate(data.checkOut) : undefined,
         note: data.note ? String(data.note) : undefined,
@@ -41,7 +41,9 @@ export function subscribeToAttendance(workspaceId: string, startDate: string, en
 
 export async function saveAttendance(input: { workspaceId: string; userId: string; date: string; status: AttendanceStatus; markedBy: string; checkIn?: Date; checkOut?: Date; note?: string }) {
   const id = attendanceId(input.workspaceId, input.userId, input.date)
-  await setDoc(doc(db, COLLECTION, id), {
+  const ref = doc(db, COLLECTION, id)
+  const existing = await getDoc(ref)
+  await setDoc(ref, {
     workspaceId: input.workspaceId,
     userId: input.userId,
     date: input.date,
@@ -51,6 +53,6 @@ export async function saveAttendance(input: { workspaceId: string; userId: strin
     ...(input.checkOut ? { checkOut: input.checkOut } : {}),
     note: input.note ?? '',
     updatedAt: serverTimestamp(),
-    createdAt: serverTimestamp(),
+    ...(existing.exists() ? {} : { createdAt: serverTimestamp() }),
   }, { merge: true })
 }
