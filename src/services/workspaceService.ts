@@ -66,28 +66,9 @@ export function subscribeToWorkspaceMembers(workspaceId: string, onChange: (memb
   return onSnapshot(memberCollection(workspaceId), snapshot => onChange(snapshot.docs.map(item => ({ id: item.id, ...item.data() }) as WorkspaceMember).filter(member => member.status === 'active')), error => onError?.(error instanceof Error ? error : new Error('Unable to listen for workspace members.')))
 }
 
-/**
- * Live approval queue.
- *
- * This MUST listen to the workspace's own members collection rather than the users
- * collection. A user profile can exist without a workspace membership, and reading
- * every users/{uid} -> members/{uid} document causes Promise.all() to fail as soon
- * as one unrelated user is not readable. That was the reason pending requests could
- * silently disappear from the approval screen.
- *
- * Owners/admins are authorized by the Firestore rules to read this workspace's
- * members collection, and the query returns only pending requests.
- */
 export function subscribeToPendingWorkspaceMembers(workspaceId: string, onChange: (members: WorkspaceMember[]) => void, onError?: (error: Error) => void): Unsubscribe {
   const pendingQuery = query(memberCollection(workspaceId), where('status', '==', 'pending'))
-  return onSnapshot(
-    pendingQuery,
-    snapshot => {
-      const members = snapshot.docs.map(item => ({ id: item.id, ...item.data() }) as WorkspaceMember)
-      onChange(members)
-    },
-    error => onError?.(error instanceof Error ? error : new Error('Unable to load pending member approvals.')),
-  )
+  return onSnapshot(pendingQuery, snapshot => onChange(snapshot.docs.map(item => ({ id: item.id, ...item.data() }) as WorkspaceMember)), error => onError?.(error instanceof Error ? error : new Error('Unable to load pending member approvals.')))
 }
 
 export async function setWorkspaceMember(workspaceId: string, userId: string, role: UserRole = 'member', user?: User, status: WorkspaceMember['status'] = 'active'): Promise<void> {
@@ -122,7 +103,7 @@ export async function initializeDefaultWorkspace(userId: string, user?: User): P
   if (sharedWorkspace) {
     const existingMember = await getWorkspaceMember(sharedWorkspace.id, userId)
     if (existingMember) {
-      await setDefaultWorkspace(userId, sharedWorkspace.id)
+      if (existingMember.status === 'active') await setDefaultWorkspace(userId, sharedWorkspace.id)
       return sharedWorkspace
     }
     if (sharedWorkspace.ownerId === userId) {
@@ -134,29 +115,42 @@ export async function initializeDefaultWorkspace(userId: string, user?: User): P
   return null
 }
 
+/**
+ * Creates the pending membership FIRST and only then assigns defaultWorkspaceId.
+ * A brand-new registrant is intentionally not allowed to read the workspace before
+ * membership exists, so this function must never call getWorkspace() before create.
+ * Firestore rules authorize a self-created pending member at the exact workspace ID.
+ */
 export async function requestWorkspaceMembership(workspaceId: string, user: User, requestedRole: UserRole = 'member'): Promise<WorkspaceMember> {
   const normalizedWorkspaceId = workspaceId.trim()
   if (!normalizedWorkspaceId) throw new Error('Please enter a valid Workspace ID.')
-  const workspace = await getWorkspace(normalizedWorkspaceId)
-  if (!workspace) throw new Error('Workspace ID was not found. Please check it and try again.')
   const memberRef = memberDocument(normalizedWorkspaceId, user.uid)
   const existingSnapshot = await getDoc(memberRef)
   if (existingSnapshot.exists()) {
     const existing = { id: existingSnapshot.id, ...existingSnapshot.data() } as WorkspaceMember
-    if (existing.status === 'active') {
-      await setDefaultWorkspace(user.uid, normalizedWorkspaceId)
-      return existing
-    }
-    if (existing.status === 'pending' || existing.status === 'invited') {
+    if (existing.status === 'active' || existing.status === 'pending' || existing.status === 'invited') {
       await setDefaultWorkspace(user.uid, normalizedWorkspaceId)
       return existing
     }
     if (existing.status === 'suspended') throw new Error('Your membership in this workspace is suspended.')
     if (existing.status === 'rejected') throw new Error('Your previous request was rejected. Please contact a workspace administrator.')
   }
-  await setDoc(memberRef, { id: user.uid, workspaceId: normalizedWorkspaceId, userId: user.uid, role: requestedRole, status: 'pending', displayName: user.displayName || user.email?.split('@')[0] || 'Workspace Member', email: user.email || '', photoURL: user.photoURL || null, designation: requestedRole, grantedPermissions: [], deniedPermissions: [], joinedAt: serverTimestamp(), updatedAt: serverTimestamp() })
+  const membership: WorkspaceMember = {
+    id: user.uid,
+    workspaceId: normalizedWorkspaceId,
+    userId: user.uid,
+    role: requestedRole,
+    status: 'pending',
+    displayName: user.displayName || user.email?.split('@')[0] || 'Workspace Member',
+    email: user.email || '',
+    photoURL: user.photoURL || null,
+    designation: requestedRole,
+    grantedPermissions: [],
+    deniedPermissions: [],
+  }
+  await setDoc(memberRef, { ...membership, joinedAt: serverTimestamp(), updatedAt: serverTimestamp() })
   await setDefaultWorkspace(user.uid, normalizedWorkspaceId)
-  return { id: user.uid, workspaceId: normalizedWorkspaceId, userId: user.uid, role: requestedRole, status: 'pending', displayName: user.displayName || user.email?.split('@')[0] || 'Workspace Member', email: user.email || '', photoURL: user.photoURL || null, designation: requestedRole, grantedPermissions: [], deniedPermissions: [] } as WorkspaceMember
+  return membership
 }
 
 export async function approveWorkspaceMember(workspaceId: string, userId: string, role: UserRole = 'member'): Promise<void> {
