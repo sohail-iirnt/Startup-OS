@@ -24,7 +24,12 @@ export async function getWorkspaceMemberDetails(workspaceId: string, userId: str
 export async function getPendingMembers(workspaceId: string): Promise<WorkspaceMember[]> { const members = await getPendingWorkspaceMembers(workspaceId); return Promise.all(members.map(enrichMember)) }
 export async function approveMember(workspaceId: string, userId: string, role: UserRole): Promise<void> { await approveWorkspaceMember(workspaceId, userId, role) }
 export async function rejectMember(workspaceId: string, userId: string): Promise<void> { await rejectWorkspaceMember(workspaceId, userId) }
-export async function updateMemberRole(workspaceId: string, userId: string, role: UserRole): Promise<void> { await updateDoc(memberRef(workspaceId, userId), { role, designation: role === 'owner' ? 'Founder' : role, updatedAt: serverTimestamp() }) }
+
+/** Role changes reset previous role-specific overrides so defaults are deterministic. */
+export async function updateMemberRole(workspaceId: string, userId: string, role: UserRole): Promise<void> {
+  await updateDoc(memberRef(workspaceId, userId), { role, designation: role === 'owner' ? 'Founder' : role, grantedPermissions: [], deniedPermissions: [], updatedAt: serverTimestamp() })
+}
+
 export async function updateMemberDesignation(workspaceId: string, userId: string, designation: string): Promise<void> { const normalized = designation.trim(); if (!normalized) throw new Error('Designation is required.'); await updateDoc(memberRef(workspaceId, userId), { designation: normalized, updatedAt: serverTimestamp() }) }
 export async function suspendMember(workspaceId: string, userId: string): Promise<void> { await updateDoc(memberRef(workspaceId, userId), { status: 'suspended', updatedAt: serverTimestamp() }) }
 export async function reactivateMember(workspaceId: string, userId: string): Promise<void> { await updateDoc(memberRef(workspaceId, userId), { status: 'active', updatedAt: serverTimestamp() }) }
