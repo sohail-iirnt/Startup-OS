@@ -82,8 +82,13 @@ export async function updateMemberPermissions(workspaceId: string, userId: strin
   await updateDoc(memberDocument(workspaceId, userId), { grantedPermissions, deniedPermissions, updatedAt: serverTimestamp() })
 }
 
+/**
+ * A role change establishes a new baseline. Old role-specific overrides are cleared
+ * so a member can never carry stale denials from a previous role into the new role.
+ * Administrators can immediately add custom grants/denials again in Roles & Permissions.
+ */
 export async function updateMemberRole(workspaceId: string, userId: string, role: UserRole): Promise<void> {
-  await updateDoc(memberDocument(workspaceId, userId), { role, updatedAt: serverTimestamp() })
+  await updateDoc(memberDocument(workspaceId, userId), { role, grantedPermissions: [], deniedPermissions: [], updatedAt: serverTimestamp() })
 }
 
 async function findDefaultWorkspace(): Promise<Workspace | null> {
@@ -115,12 +120,6 @@ export async function initializeDefaultWorkspace(userId: string, user?: User): P
   return null
 }
 
-/**
- * Creates the pending membership FIRST and only then assigns defaultWorkspaceId.
- * A brand-new registrant is intentionally not allowed to read the workspace before
- * membership exists, so this function must never call getWorkspace() before create.
- * Firestore rules authorize a self-created pending member at the exact workspace ID.
- */
 export async function requestWorkspaceMembership(workspaceId: string, user: User, requestedRole: UserRole = 'member'): Promise<WorkspaceMember> {
   const normalizedWorkspaceId = workspaceId.trim()
   if (!normalizedWorkspaceId) throw new Error('Please enter a valid Workspace ID.')
@@ -154,7 +153,7 @@ export async function requestWorkspaceMembership(workspaceId: string, user: User
 }
 
 export async function approveWorkspaceMember(workspaceId: string, userId: string, role: UserRole = 'member'): Promise<void> {
-  await updateDoc(memberDocument(workspaceId, userId), { role, status: 'active', designation: role === 'owner' ? 'Founder' : role, joinedAt: serverTimestamp(), updatedAt: serverTimestamp() })
+  await updateDoc(memberDocument(workspaceId, userId), { role, status: 'active', designation: role === 'owner' ? 'Founder' : role, grantedPermissions: [], deniedPermissions: [], joinedAt: serverTimestamp(), updatedAt: serverTimestamp() })
 }
 
 export async function rejectWorkspaceMember(workspaceId: string, userId: string): Promise<void> {
