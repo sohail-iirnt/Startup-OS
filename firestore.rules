@@ -4,50 +4,54 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
     function memberPath(workspaceId, userId) { return /databases/$(database)/documents/workspaces/$(workspaceId)/members/$(userId); }
+    function workspacePath(workspaceId) { return /databases/$(database)/documents/workspaces/$(workspaceId); }
     function hasActiveMembership(workspaceId) { return signedIn() && exists(memberPath(workspaceId, request.auth.uid)) && get(memberPath(workspaceId, request.auth.uid)).data.status == 'active'; }
+    function isWorkspaceOwner(workspaceId) { return signedIn() && exists(workspacePath(workspaceId)) && get(workspacePath(workspaceId)).data.ownerId == request.auth.uid; }
     function userRole(workspaceId) { return get(memberPath(workspaceId, request.auth.uid)).data.role; }
     function normalizedRole(workspaceId) { return userRole(workspaceId) == 'Owner' ? 'owner' : userRole(workspaceId) == 'Admin' ? 'admin' : userRole(workspaceId) == 'administrator' ? 'admin' : userRole(workspaceId) == 'Administrator' ? 'admin' : userRole(workspaceId) == 'Manager' ? 'manager' : userRole(workspaceId) == 'Member' ? 'member' : userRole(workspaceId) == 'Intern' ? 'intern' : userRole(workspaceId) == 'Viewer' ? 'viewer' : userRole(workspaceId); }
     function hasRole(workspaceId, role) { return hasActiveMembership(workspaceId) && normalizedRole(workspaceId) == role; }
     function hasAnyRole(workspaceId, roles) { return hasActiveMembership(workspaceId) && normalizedRole(workspaceId) in roles; }
-    function isOwner(workspaceId) { return hasRole(workspaceId, 'owner'); }
+    function isOwner(workspaceId) { return isWorkspaceOwner(workspaceId) || hasRole(workspaceId, 'owner'); }
     function isAdmin(workspaceId) { return hasRole(workspaceId, 'admin'); }
-    function isWorkspaceAdmin(workspaceId) { return hasAnyRole(workspaceId, ['owner', 'admin']); }
+    function isWorkspaceAdmin(workspaceId) { return isOwner(workspaceId) || isAdmin(workspaceId); }
     function canApproveMembers(workspaceId) { return hasPermission(workspaceId, 'members.approve'); }
     function canManage(workspaceId) { return isWorkspaceAdmin(workspaceId); }
     function canCreateTasks(workspaceId) { return hasPermission(workspaceId, 'tasks.create'); }
     function canCreateProjects(workspaceId) { return hasPermission(workspaceId, 'projects.create'); }
     function canInviteRole(workspaceId, role) { return isWorkspaceAdmin(workspaceId) ? role in ['admin', 'manager', 'member', 'intern', 'viewer'] : role in ['member', 'intern', 'viewer']; }
     function hasPermission(workspaceId, permission) {
-      return hasActiveMembership(workspaceId) && (isWorkspaceAdmin(workspaceId) ||
-        (permission == 'workspace.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
-        (permission == 'members.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
-        (permission == 'members.approve' && normalizedRole(workspaceId) == 'manager') ||
-        (permission == 'projects.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
-        (permission == 'projects.create' && normalizedRole(workspaceId) in ['manager','intern']) ||
-        (permission == 'projects.update' && normalizedRole(workspaceId) in ['manager','member','intern']) ||
-        (permission == 'tasks.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
-        (permission == 'tasks.create' && normalizedRole(workspaceId) in ['manager','member']) ||
-        (permission == 'tasks.update' && normalizedRole(workspaceId) in ['manager','member','intern']) ||
-        (permission == 'tasks.delete' && normalizedRole(workspaceId) == 'manager') ||
-        (permission == 'clients.view' && normalizedRole(workspaceId) in ['manager','member','viewer']) ||
-        (permission == 'clients.manage' && normalizedRole(workspaceId) == 'manager') ||
-        (permission == 'websites.view' && normalizedRole(workspaceId) in ['manager','member','viewer']) ||
-        (permission == 'websites.manage' && normalizedRole(workspaceId) == 'manager') ||
-        (permission == 'calendar.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
-        (permission == 'calendar.manage' && normalizedRole(workspaceId) == 'manager') ||
-        (permission == 'ideas.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
-        (permission == 'ideas.manage' && normalizedRole(workspaceId) in ['manager','member','intern']) ||
-        (permission == 'documents.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
-        (permission == 'documents.manage' && normalizedRole(workspaceId) in ['manager','member','intern']) ||
-        (permission == 'goals.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
-        (permission == 'goals.manage' && normalizedRole(workspaceId) == 'manager') ||
-        (permission == 'analytics.view' && normalizedRole(workspaceId) in ['manager','member','viewer']) ||
-        (permission == 'attendance.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
-        (permission == 'attendance.manage' && normalizedRole(workspaceId) == 'manager') ||
-        (permission == 'leave.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
-        (permission == 'leave.manage' && normalizedRole(workspaceId) == 'manager') ||
-        (!(permission in ['members.manage', 'access.manage', 'settings.manage']) && get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions)
-      ) && !(isWorkspaceAdmin(workspaceId) == false && get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions);
+      return signedIn() && (isWorkspaceAdmin(workspaceId) ||
+        (hasActiveMembership(workspaceId) && (
+          (permission == 'workspace.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
+          (permission == 'members.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
+          (permission == 'members.approve' && normalizedRole(workspaceId) == 'manager') ||
+          (permission == 'projects.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
+          (permission == 'projects.create' && normalizedRole(workspaceId) in ['manager','intern']) ||
+          (permission == 'projects.update' && normalizedRole(workspaceId) in ['manager','member','intern']) ||
+          (permission == 'tasks.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
+          (permission == 'tasks.create' && normalizedRole(workspaceId) in ['manager','member']) ||
+          (permission == 'tasks.update' && normalizedRole(workspaceId) in ['manager','member','intern']) ||
+          (permission == 'tasks.delete' && normalizedRole(workspaceId) == 'manager') ||
+          (permission == 'clients.view' && normalizedRole(workspaceId) in ['manager','member','viewer']) ||
+          (permission == 'clients.manage' && normalizedRole(workspaceId) == 'manager') ||
+          (permission == 'websites.view' && normalizedRole(workspaceId) in ['manager','member','viewer']) ||
+          (permission == 'websites.manage' && normalizedRole(workspaceId) == 'manager') ||
+          (permission == 'calendar.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
+          (permission == 'calendar.manage' && normalizedRole(workspaceId) == 'manager') ||
+          (permission == 'ideas.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
+          (permission == 'ideas.manage' && normalizedRole(workspaceId) in ['manager','member','intern']) ||
+          (permission == 'documents.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
+          (permission == 'documents.manage' && normalizedRole(workspaceId) in ['manager','member','intern']) ||
+          (permission == 'goals.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
+          (permission == 'goals.manage' && normalizedRole(workspaceId) == 'manager') ||
+          (permission == 'analytics.view' && normalizedRole(workspaceId) in ['manager','member','viewer']) ||
+          (permission == 'attendance.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
+          (permission == 'attendance.manage' && normalizedRole(workspaceId) == 'manager') ||
+          (permission == 'leave.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
+          (permission == 'leave.manage' && normalizedRole(workspaceId) == 'manager') ||
+          (!(permission in ['members.manage', 'access.manage', 'settings.manage']) && get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions)
+        ))
+      ) && !(hasActiveMembership(workspaceId) && !isWorkspaceAdmin(workspaceId) && get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions);
     }
     function canUpdateOwnTask(workspaceId, taskId) { return hasActiveMembership(workspaceId) && normalizedRole(workspaceId) == 'intern' && get(/databases/$(database)/documents/tasks/$(taskId)).data.assigneeId == request.auth.uid && hasPermission(workspaceId, 'tasks.update'); }
     function canUpdateOwnProject(workspaceId, projectId) { return hasActiveMembership(workspaceId) && normalizedRole(workspaceId) == 'intern' && hasPermission(workspaceId, 'projects.update') && ((get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid) || (get(/databases/$(database)/documents/projects/$(projectId)).data.keys().hasAll(['memberIds']) && request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.memberIds)); }
@@ -55,12 +59,12 @@ service cloud.firestore {
 
     match /users/{userId} { allow read: if signedIn(); allow create, update: if signedIn() && request.auth.uid == userId; allow delete: if false; }
     match /workspaces/{workspaceId} {
-      allow read: if hasActiveMembership(workspaceId) || (signedIn() && resource.data.ownerId == request.auth.uid);
+      allow read: if hasActiveMembership(workspaceId) || isWorkspaceOwner(workspaceId);
       allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
       allow update: if canManage(workspaceId); allow delete: if false;
       match /members/{memberId} {
         allow create: if signedIn() && request.auth.uid == memberId && request.resource.data.userId == request.auth.uid && request.resource.data.workspaceId == workspaceId && request.resource.data.status == 'pending';
-        allow read: if signedIn() && (request.auth.uid == memberId || hasAnyRole(workspaceId, ['owner', 'admin', 'manager', 'member']));
+        allow read: if signedIn() && (request.auth.uid == memberId || isWorkspaceAdmin(workspaceId) || hasAnyRole(workspaceId, ['manager', 'member']));
         allow update: if memberId != request.auth.uid && request.resource.data.userId == resource.data.userId && request.resource.data.workspaceId == resource.data.workspaceId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'designation', 'status', 'updatedAt', 'grantedPermissions', 'deniedPermissions']) && (canManage(workspaceId) || (canApproveMemberUpdate(workspaceId) && resource.data.status == 'pending'));
         allow delete: if false;
       }
@@ -74,7 +78,7 @@ service cloud.firestore {
     }
     match /financeEntries/{entryId} { allow create: if signedIn() && request.resource.data.workspaceId is string && hasPermission(request.resource.data.workspaceId, 'finance.manage') && request.resource.data.createdBy == request.auth.uid && request.resource.data.type in ['income', 'expense', 'payroll'] && request.resource.data.amount > 0; allow read: if hasPermission(resource.data.workspaceId, 'finance.view'); allow update: if hasPermission(resource.data.workspaceId, 'finance.manage') && resource.data.workspaceId == request.resource.data.workspaceId; allow delete: if hasPermission(resource.data.workspaceId, 'finance.manage'); }
     match /calendarEvents/{eventId} { allow create: if signedIn() && request.resource.data.workspaceId is string && hasPermission(request.resource.data.workspaceId, 'calendar.manage') && request.resource.data.createdBy == request.auth.uid; allow read: if hasPermission(resource.data.workspaceId, 'calendar.view'); allow update: if hasPermission(request.resource.data.workspaceId, 'calendar.manage') && resource.data.workspaceId == request.resource.data.workspaceId; allow delete: if hasPermission(resource.data.workspaceId, 'calendar.manage'); }
-    match /websites/{websiteId} { allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && hasPermission(request.resource.data.workspaceId, 'websites.manage'); allow read: if hasPermission(resource.data.workspaceId, 'websites.view'); allow update: if hasPermission(resource.data.workspaceId, 'websites.manage') && resource.data.workspaceId == request.resource.data.workspaceId; allow delete: if hasPermission(resource.data.workspaceId, 'websites.manage'); }
+    match /websites/{websiteId} { allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && hasPermission(request.resource.data.workspaceId, 'websites.manage'); allow read: if hasPermission(resource.data.workspaceId, 'websites.view'); allow update: if hasPermission(request.resource.data.workspaceId, 'websites.manage') && resource.data.workspaceId == request.resource.data.workspaceId; allow delete: if hasPermission(resource.data.workspaceId, 'websites.manage'); }
     match /clients/{clientId} { allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && hasPermission(request.resource.data.workspaceId, 'clients.manage'); allow read: if hasPermission(resource.data.workspaceId, 'clients.view'); allow update: if hasPermission(resource.data.workspaceId, 'clients.manage'); allow delete: if hasPermission(resource.data.workspaceId, 'clients.manage'); }
     match /ideas/{ideaId} { allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && hasPermission(request.resource.data.workspaceId, 'ideas.manage') && request.resource.data.createdBy == request.auth.uid; allow read: if hasPermission(resource.data.workspaceId, 'ideas.view'); allow update: if hasPermission(resource.data.workspaceId, 'ideas.manage') && resource.data.workspaceId == request.resource.data.workspaceId; allow delete: if hasPermission(resource.data.workspaceId, 'ideas.manage'); }
     match /documents/{documentId} { allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.workspaceId != '' && hasPermission(request.resource.data.workspaceId, 'documents.manage') && request.resource.data.createdBy == request.auth.uid; allow read: if hasPermission(resource.data.workspaceId, 'documents.view'); allow update: if hasPermission(resource.data.workspaceId, 'documents.manage') && resource.data.workspaceId == request.resource.data.workspaceId; allow delete: if hasPermission(resource.data.workspaceId, 'documents.manage'); }
