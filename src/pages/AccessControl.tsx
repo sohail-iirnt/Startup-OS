@@ -43,6 +43,10 @@ const permissionGroups: Array<{ label: string; permissions: Array<{ key: Workspa
     { key: 'goals.view', label: 'View goals & targets', description: 'See measurable company and team targets.' },
     { key: 'goals.manage', label: 'Manage goals & targets', description: 'Create goals and update their progress.' },
   ] },
+  { label: 'People operations', permissions: [
+    { key: 'attendance.view', label: 'View attendance', description: 'View attendance records and personal check-in/out history.' },
+    { key: 'attendance.manage', label: 'Manage attendance', description: 'Mark and update attendance for workspace members.' },
+  ] },
   { label: 'Knowledge & insights', permissions: [
     { key: 'ideas.view', label: 'View ideas', description: 'Access the idea vault.' },
     { key: 'ideas.manage', label: 'Manage ideas', description: 'Create and remove ideas.' },
