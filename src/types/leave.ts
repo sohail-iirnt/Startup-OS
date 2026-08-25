@@ -1,4 +1,4 @@
-export type LeaveType = 'casual' | 'sick' | 'earned' | 'unpaid' | 'other'
+export type LeaveType = 'casual' | 'sick' | 'earned' | 'unpaid' | 'traveling' | 'other'
 export type LeaveStatus = 'pending' | 'approved' | 'rejected' | 'cancelled'
 
 export type LeaveRequest = {
@@ -6,6 +6,7 @@ export type LeaveRequest = {
   workspaceId: string
   userId: string
   type: LeaveType
+  customType?: string
   startDate: string
   endDate: string
   reason: string
