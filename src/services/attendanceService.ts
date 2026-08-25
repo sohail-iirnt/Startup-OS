@@ -15,8 +15,10 @@ export function attendanceId(workspaceId: string, userId: string, date: string) 
   return `${workspaceId}_${userId}_${date}`
 }
 
-export function subscribeToAttendance(workspaceId: string, startDate: string, endDate: string, onChange: (records: AttendanceRecord[]) => void, onError?: (error: Error) => void): Unsubscribe {
-  const ref = query(collection(db, COLLECTION), where('workspaceId', '==', workspaceId), where('date', '>=', startDate), where('date', '<=', endDate))
+export function subscribeToAttendance(workspaceId: string, startDate: string, endDate: string, canManage: boolean, userId: string, onChange: (records: AttendanceRecord[]) => void, onError?: (error: Error) => void): Unsubscribe {
+  const constraints = [where('workspaceId', '==', workspaceId), where('date', '>=', startDate), where('date', '<=', endDate)]
+  if (!canManage) constraints.push(where('userId', '==', userId))
+  const ref = query(collection(db, COLLECTION), ...constraints)
   return onSnapshot(ref, snapshot => {
     const records = snapshot.docs.map(item => {
       const data = item.data()
