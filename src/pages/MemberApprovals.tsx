@@ -3,13 +3,23 @@ import { Check, ShieldCheck, UserRound, X } from 'lucide-react'
 
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
+import { useAuth } from '../context/useAuth'
 import { useWorkspace } from '../context/useWorkspace'
 import { approveMember, rejectMember } from '../services/memberService'
 import { subscribeToPendingWorkspaceMembers } from '../services/workspaceService'
 import type { UserRole } from '../types/common'
 import type { WorkspaceMember } from '../types/workspace'
 
+function normalizeRole(role: string | undefined): string {
+  const value = String(role ?? '').trim().toLowerCase()
+  if (value === 'owner') return 'owner'
+  if (value === 'admin' || value === 'administrator') return 'admin'
+  if (value === 'manager') return 'manager'
+  return value
+}
+
 function MemberApprovals() {
+  const { user } = useAuth()
   const { workspace, member: currentMember, loading: workspaceLoading, hasPermission } = useWorkspace()
   const [members, setMembers] = useState<WorkspaceMember[]>([])
   const [roles, setRoles] = useState<Record<string, UserRole>>({})
@@ -17,21 +27,16 @@ function MemberApprovals() {
   const [savingId, setSavingId] = useState('')
   const [error, setError] = useState('')
 
-  // Owner/Admin are always allowed to approve. This is deliberately independent of
-  // custom permission arrays so a stale RBAC profile cannot hide the approval queue.
-  const canApprove = currentMember?.role === 'owner' || currentMember?.role === 'admin' || hasPermission('members.approve')
-  const canAssignElevatedRoles = currentMember?.role === 'owner' || currentMember?.role === 'admin'
+  const currentRole = normalizeRole(currentMember?.role)
+  const isOwner = Boolean(user?.uid && workspace?.ownerId === user.uid) || currentRole === 'owner'
+  const isAdmin = currentRole === 'admin'
+  const canApprove = isOwner || isAdmin || hasPermission('members.approve')
+  const canAssignElevatedRoles = isOwner || isAdmin
 
   useEffect(() => {
     const workspaceId = workspace?.id
-    if (workspaceLoading || !workspaceId || !canApprove) {
-      setMembers([])
-      setLoading(!workspaceLoading && Boolean(workspaceId) && !canApprove ? false : true)
-      return undefined
-    }
+    if (workspaceLoading || !workspaceId || !canApprove) return undefined
 
-    setLoading(true)
-    setError('')
     return subscribeToPendingWorkspaceMembers(
       workspaceId,
       (nextMembers) => {
@@ -49,6 +54,7 @@ function MemberApprovals() {
           return next
         })
         setLoading(false)
+        setError('')
       },
       (listenError) => {
         setError(listenError.message)
@@ -57,12 +63,12 @@ function MemberApprovals() {
     )
   }, [workspace?.id, workspaceLoading, canApprove])
 
-  async function handleApprove(member: WorkspaceMember) {
+  async function handleApprove(pendingMember: WorkspaceMember) {
     if (!workspace?.id || savingId) return
-    setSavingId(member.id)
+    setSavingId(pendingMember.id)
     setError('')
     try {
-      await approveMember(workspace.id, member.userId, roles[member.id] ?? 'intern')
+      await approveMember(workspace.id, pendingMember.userId, roles[pendingMember.id] ?? 'intern')
     } catch (approveError) {
       setError(approveError instanceof Error ? approveError.message : 'Unable to approve member.')
     } finally {
@@ -70,12 +76,12 @@ function MemberApprovals() {
     }
   }
 
-  async function handleReject(member: WorkspaceMember) {
+  async function handleReject(pendingMember: WorkspaceMember) {
     if (!workspace?.id || savingId) return
-    setSavingId(member.id)
+    setSavingId(pendingMember.id)
     setError('')
     try {
-      await rejectMember(workspace.id, member.userId)
+      await rejectMember(workspace.id, pendingMember.userId)
     } catch (rejectError) {
       setError(rejectError instanceof Error ? rejectError.message : 'Unable to reject member.')
     } finally {
@@ -115,25 +121,25 @@ function MemberApprovals() {
         </Card>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
-          {members.map((member) => (
-            <Card key={member.id} className="p-5">
+          {members.map((pendingMember) => (
+            <Card key={pendingMember.id} className="p-5">
               <div className="flex items-start gap-4">
-                {member.photoURL ? <img src={member.photoURL} alt="" className="h-12 w-12 rounded-xl object-cover" /> : <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--os-accent-soft)] text-[var(--os-accent)]"><UserRound size={20} /></div>}
+                {pendingMember.photoURL ? <img src={pendingMember.photoURL} alt="" className="h-12 w-12 rounded-xl object-cover" /> : <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--os-accent-soft)] text-[var(--os-accent)]"><UserRound size={20} /></div>}
                 <div className="min-w-0 flex-1">
-                  <h2 className="truncate text-base font-semibold text-[var(--os-text)]">{member.displayName || 'Workspace Member'}</h2>
-                  <p className="mt-1 truncate text-sm text-[var(--os-text-secondary)]">{member.email || 'No email available'}</p>
-                  <p className="mt-1 text-xs text-[var(--os-text-muted)]">Requested: <span className="capitalize">{member.role}</span></p>
+                  <h2 className="truncate text-base font-semibold text-[var(--os-text)]">{pendingMember.displayName || 'Workspace Member'}</h2>
+                  <p className="mt-1 truncate text-sm text-[var(--os-text-secondary)]">{pendingMember.email || 'No email available'}</p>
+                  <p className="mt-1 text-xs text-[var(--os-text-muted)]">Requested: <span className="capitalize">{pendingMember.role}</span></p>
                 </div>
               </div>
               <div className="mt-5 grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
                 <div>
-                  <label htmlFor={`role-${member.id}`} className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-[var(--os-text-muted)]">Final role</label>
-                  <select id={`role-${member.id}`} value={roles[member.id] ?? 'intern'} onChange={(event) => setRoles((current) => ({ ...current, [member.id]: event.target.value as UserRole }))} disabled={savingId === member.id} className="h-10 w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 text-sm text-[var(--os-text)]">
+                  <label htmlFor={`role-${pendingMember.id}`} className="mb-2 block text-xs font-semibold uppercase tracking-[0.1em] text-[var(--os-text-muted)]">Final role</label>
+                  <select id={`role-${pendingMember.id}`} value={roles[pendingMember.id] ?? 'intern'} onChange={(event) => setRoles((current) => ({ ...current, [pendingMember.id]: event.target.value as UserRole }))} disabled={savingId === pendingMember.id} className="h-10 w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 text-sm text-[var(--os-text)]">
                     <option value="intern">Intern</option><option value="member">Member</option><option value="viewer">Viewer</option>{canAssignElevatedRoles && <option value="manager">Manager</option>}
                   </select>
                 </div>
-                <Button type="button" onClick={() => void handleApprove(member)} disabled={savingId === member.id}><Check size={15} />{savingId === member.id ? 'Saving...' : 'Approve'}</Button>
-                <Button type="button" variant="secondary" onClick={() => void handleReject(member)} disabled={savingId === member.id}><X size={15} />Reject</Button>
+                <Button type="button" onClick={() => void handleApprove(pendingMember)} disabled={savingId === pendingMember.id}><Check size={15} />{savingId === pendingMember.id ? 'Saving...' : 'Approve'}</Button>
+                <Button type="button" variant="secondary" onClick={() => void handleReject(pendingMember)} disabled={savingId === pendingMember.id}><X size={15} />Reject</Button>
               </div>
             </Card>
           ))}
