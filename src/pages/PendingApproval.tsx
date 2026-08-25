@@ -17,10 +17,6 @@ function PendingApproval() {
   const [liveMember, setLiveMember] = useState(member)
 
   useEffect(() => {
-    setLiveMember(member)
-  }, [member])
-
-  useEffect(() => {
     if (!workspace?.id || !user?.uid) return undefined
     return subscribeToWorkspaceMember(
       workspace.id,
