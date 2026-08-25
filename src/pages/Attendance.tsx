@@ -1,0 +1,102 @@
+import { useEffect, useMemo, useState } from 'react'
+import { CalendarCheck2, Clock3, LogIn, LogOut, Users } from 'lucide-react'
+import Card from '../components/ui/Card'
+import ThemeSelect from '../components/ui/ThemeSelect'
+import { useAuth } from '../context/useAuth'
+import { useWorkspace } from '../context/useWorkspace'
+import { saveAttendance, subscribeToAttendance } from '../services/attendanceService'
+import { subscribeToWorkspaceMembers } from '../services/workspaceService'
+import type { AttendanceRecord, AttendanceStatus } from '../types/attendance'
+import type { WorkspaceMember } from '../types/workspace'
+
+const statuses: { value: AttendanceStatus; label: string }[] = [
+  { value: 'present', label: 'Present' },
+  { value: 'late', label: 'Late' },
+  { value: 'half-day', label: 'Half day' },
+  { value: 'absent', label: 'Absent' },
+  { value: 'leave', label: 'Leave' },
+]
+
+function dateKey(date = new Date()) { return date.toISOString().slice(0, 10) }
+function monthBounds(value: string) {
+  const [year, month] = value.split('-').map(Number)
+  const last = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  return { start: `${value}-01`, end: `${value}-${String(last).padStart(2, '0')}` }
+}
+function timeLabel(value?: Date) { return value ? value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—' }
+
+export default function Attendance() {
+  const { user } = useAuth()
+  const { workspace, member, loading: workspaceLoading, hasPermission } = useWorkspace()
+  const workspaceId = workspace?.id
+  const userId = user?.uid
+  const canManage = hasPermission('attendance.manage')
+  const canView = hasPermission('attendance.view')
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7))
+  const [records, setRecords] = useState<AttendanceRecord[]>([])
+  const [members, setMembers] = useState<WorkspaceMember[]>([])
+  const [selectedUser, setSelectedUser] = useState('')
+  const [status, setStatus] = useState<AttendanceStatus>('present')
+  const [note, setNote] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const bounds = useMemo(() => monthBounds(month), [month])
+
+  useEffect(() => {
+    if (workspaceLoading || !workspaceId || !canView) return undefined
+    return subscribeToAttendance(workspaceId, bounds.start, bounds.end, setRecords, (listenError) => setError(listenError.message))
+  }, [workspaceId, workspaceLoading, canView, bounds.start, bounds.end])
+
+  useEffect(() => {
+    if (!workspaceId || !canManage) return undefined
+    return subscribeToWorkspaceMembers(workspaceId, setMembers, (listenError) => setError(listenError.message))
+  }, [workspaceId, canManage])
+
+  useEffect(() => {
+    if (!selectedUser && userId) setSelectedUser(userId)
+  }, [selectedUser, userId])
+
+  const today = dateKey()
+  const myToday = records.find((item) => item.userId === userId && item.date === today)
+  const selectedToday = records.find((item) => item.userId === (canManage ? selectedUser : userId) && item.date === today)
+  const presentCount = records.filter((item) => item.status === 'present' || item.status === 'late').length
+  const leaveCount = records.filter((item) => item.status === 'leave').length
+  const absentCount = records.filter((item) => item.status === 'absent').length
+
+  async function handleCheckIn() {
+    if (!workspaceId || !userId) return
+    setSaving(true); setError('')
+    try { await saveAttendance({ workspaceId, userId, date: today, status: 'present', markedBy: userId, checkIn: new Date(), checkOut: myToday?.checkOut, note: myToday?.note }) }
+    catch (saveError) { setError(saveError instanceof Error ? saveError.message : 'Unable to save attendance.') }
+    finally { setSaving(false) }
+  }
+
+  async function handleCheckOut() {
+    if (!workspaceId || !userId) return
+    setSaving(true); setError('')
+    try { await saveAttendance({ workspaceId, userId, date: today, status: myToday?.status ?? 'present', markedBy: userId, checkIn: myToday?.checkIn, checkOut: new Date(), note: myToday?.note }) }
+    catch (saveError) { setError(saveError instanceof Error ? saveError.message : 'Unable to save attendance.') }
+    finally { setSaving(false) }
+  }
+
+  async function handleManagerSave() {
+    if (!workspaceId || !userId || !selectedUser) return
+    setSaving(true); setError('')
+    try { await saveAttendance({ workspaceId, userId: selectedUser, date: today, status, markedBy: userId, checkIn: selectedToday?.checkIn, checkOut: selectedToday?.checkOut, note }) ; setNote('') }
+    catch (saveError) { setError(saveError instanceof Error ? saveError.message : 'Unable to save attendance.') }
+    finally { setSaving(false) }
+  }
+
+  if (!canView) return <div className="mx-auto w-full max-w-[1400px] p-6"><Card className="p-8 text-center"><p className="text-sm text-[var(--os-text-secondary)]">You do not have permission to view attendance.</p></Card></div>
+
+  return <div className="mx-auto w-full max-w-[1400px] p-4 sm:p-6 lg:p-8">
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--os-accent)]">People & Operations</p><h1 className="mt-1 text-3xl font-semibold tracking-tight text-[var(--os-text)]">Attendance</h1><p className="mt-2 text-sm text-[var(--os-text-secondary)]">Realtime attendance, check-in/out and monthly workforce visibility.</p></div><label className="w-full sm:w-48"><span className="mb-1 block text-xs text-[var(--os-text-muted)]">Month</span><input type="month" value={month} onChange={(event) => setMonth(event.target.value)} className="os-focus-ring h-11 w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 text-sm" /></label></div>
+    {error && <div role="alert" className="mt-5 rounded-xl border border-[var(--os-danger)]/20 bg-[var(--os-danger-soft)] px-4 py-3 text-sm text-[var(--os-danger)]">{error}</div>}
+    <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Card className="p-5"><div className="flex items-center gap-3"><CalendarCheck2 size={20} className="text-[var(--os-accent)]"/><div><p className="text-xs text-[var(--os-text-muted)]">My status today</p><p className="mt-1 text-lg font-semibold text-[var(--os-text)]">{myToday?.status ? statuses.find((item) => item.value === myToday.status)?.label : 'Not marked'}</p></div></div></Card><Card className="p-5"><div className="flex items-center gap-3"><Clock3 size={20} className="text-[var(--os-info)]"/><div><p className="text-xs text-[var(--os-text-muted)]">Check in</p><p className="mt-1 text-lg font-semibold text-[var(--os-text)]">{timeLabel(myToday?.checkIn)}</p></div></div></Card><Card className="p-5"><div className="flex items-center gap-3"><Users size={20} className="text-[var(--os-success)]"/><div><p className="text-xs text-[var(--os-text-muted)]">Present / late</p><p className="mt-1 text-lg font-semibold text-[var(--os-text)]">{presentCount}</p></div></div></Card><Card className="p-5"><div><p className="text-xs text-[var(--os-text-muted)]">Leave / absent</p><p className="mt-1 text-lg font-semibold text-[var(--os-text)]">{leaveCount} / {absentCount}</p></div></Card></div>
+    <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <Card className="overflow-hidden"><div className="border-b border-[var(--os-border)] px-5 py-4"><h2 className="text-sm font-semibold text-[var(--os-text)]">Monthly log</h2><p className="mt-1 text-xs text-[var(--os-text-muted)]">{records.length} attendance records · updates live</p></div><div className="divide-y divide-[var(--os-border)]">{records.length === 0 ? <div className="p-10 text-center text-sm text-[var(--os-text-secondary)]">No attendance records for this month.</div> : records.map((record) => { const person = members.find((item) => item.userId === record.userId); return <div key={record.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium text-[var(--os-text)]">{person?.displayName || (record.userId === userId ? 'You' : record.userId)}</p><p className="mt-1 text-xs text-[var(--os-text-muted)]">{record.date} · {timeLabel(record.checkIn)} → {timeLabel(record.checkOut)}</p></div><div className="flex items-center gap-2"><span className="rounded-full bg-[var(--os-accent-soft)] px-2.5 py-1 text-[10px] font-semibold text-[var(--os-accent)]">{statuses.find((item) => item.value === record.status)?.label || record.status}</span>{record.note && <span className="max-w-48 truncate text-xs text-[var(--os-text-muted)]">{record.note}</span>}</div></div> })}</div></Card>
+      <div className="space-y-6"><Card className="p-5"><h2 className="text-sm font-semibold text-[var(--os-text)]">My attendance</h2><p className="mt-1 text-xs text-[var(--os-text-secondary)]">{new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}</p><div className="mt-5 grid grid-cols-2 gap-3"><button type="button" disabled={saving || !!myToday?.checkIn} onClick={handleCheckIn} className="os-focus-ring flex h-11 items-center justify-center gap-2 rounded-xl bg-[var(--os-accent)] px-3 text-sm font-semibold text-white disabled:opacity-50"><LogIn size={16}/> Check in</button><button type="button" disabled={saving || !myToday?.checkIn || !!myToday?.checkOut} onClick={handleCheckOut} className="os-focus-ring flex h-11 items-center justify-center gap-2 rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 text-sm font-semibold text-[var(--os-text)] disabled:opacity-50"><LogOut size={16}/> Check out</button></div></Card>{canManage && <Card className="p-5"><h2 className="text-sm font-semibold text-[var(--os-text)]">Manager entry</h2><p className="mt-1 text-xs text-[var(--os-text-secondary)]">Mark or update today's attendance for an active member.</p><div className="mt-4 space-y-3"><ThemeSelect value={selectedUser} onChange={setSelectedUser} options={members.map((item) => ({ value: item.userId, label: item.displayName || item.email || item.userId }))} placeholder="Select member"/><ThemeSelect value={status} onChange={(value) => setStatus(value as AttendanceStatus)} options={statuses} placeholder="Status"/><textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Optional note" rows={3} className="os-focus-ring w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 py-2.5 text-sm"/><button type="button" disabled={saving || !selectedUser} onClick={handleManagerSave} className="os-focus-ring h-11 w-full rounded-xl bg-[var(--os-accent)] text-sm font-semibold text-white disabled:opacity-50">{saving ? 'Saving…' : 'Save attendance'}</button></div></Card>}</div>
+    </div>
+  </div>
+}
