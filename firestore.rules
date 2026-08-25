@@ -44,12 +44,15 @@ service cloud.firestore {
         (permission == 'analytics.view' && normalizedRole(workspaceId) in ['manager','member','viewer']) ||
         (permission == 'attendance.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
         (permission == 'attendance.manage' && normalizedRole(workspaceId) == 'manager') ||
+        (permission == 'leave.view' && normalizedRole(workspaceId) in ['manager','member','intern','viewer']) ||
+        (permission == 'leave.manage' && normalizedRole(workspaceId) == 'manager') ||
         (!(permission in ['members.manage', 'access.manage', 'settings.manage']) && get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.grantedPermissions)
       ) && !(isWorkspaceAdmin(workspaceId) == false && get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions != null && permission in get(memberPath(workspaceId, request.auth.uid)).data.deniedPermissions);
     }
     function canUpdateOwnTask(workspaceId, taskId) { return hasActiveMembership(workspaceId) && normalizedRole(workspaceId) == 'intern' && get(/databases/$(database)/documents/tasks/$(taskId)).data.assigneeId == request.auth.uid && hasPermission(workspaceId, 'tasks.update'); }
     function canUpdateOwnProject(workspaceId, projectId) { return hasActiveMembership(workspaceId) && normalizedRole(workspaceId) == 'intern' && hasPermission(workspaceId, 'projects.update') && ((get(/databases/$(database)/documents/projects/$(projectId)).data.ownerId == request.auth.uid) || (get(/databases/$(database)/documents/projects/$(projectId)).data.keys().hasAll(['memberIds']) && request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.memberIds)); }
     function canApproveMemberUpdate(workspaceId) { return canApproveMembers(workspaceId) && request.resource.data.role in (isWorkspaceAdmin(workspaceId) ? ['admin', 'manager', 'member', 'intern', 'viewer'] : ['member', 'intern', 'viewer']) && request.resource.data.status == 'active'; }
+
     match /users/{userId} { allow read: if signedIn(); allow create, update: if signedIn() && request.auth.uid == userId; allow delete: if false; }
     match /workspaces/{workspaceId} {
       allow read: if hasActiveMembership(workspaceId) || (signedIn() && resource.data.ownerId == request.auth.uid);
@@ -83,6 +86,12 @@ service cloud.firestore {
       allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.userId is string && request.resource.data.date is string && request.resource.data.status in ['present','late','half-day','absent','leave'] && ((hasPermission(request.resource.data.workspaceId, 'attendance.manage')) || (hasPermission(request.resource.data.workspaceId, 'attendance.view') && request.resource.data.userId == request.auth.uid));
       allow update: if signedIn() && resource.data.workspaceId == request.resource.data.workspaceId && ((hasPermission(resource.data.workspaceId, 'attendance.manage')) || (hasPermission(resource.data.workspaceId, 'attendance.view') && resource.data.userId == request.auth.uid));
       allow delete: if hasPermission(resource.data.workspaceId, 'attendance.manage');
+    }
+    match /leaveRequests/{leaveId} {
+      allow read: if hasPermission(resource.data.workspaceId, 'leave.view') && (hasPermission(resource.data.workspaceId, 'leave.manage') || resource.data.userId == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.workspaceId is string && request.resource.data.userId == request.auth.uid && request.resource.data.status == 'pending' && hasPermission(request.resource.data.workspaceId, 'leave.view');
+      allow update: if signedIn() && resource.data.workspaceId == request.resource.data.workspaceId && ((hasPermission(resource.data.workspaceId, 'leave.manage')) || (resource.data.userId == request.auth.uid && resource.data.status == 'pending' && request.resource.data.status == 'cancelled' && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])));
+      allow delete: if hasPermission(resource.data.workspaceId, 'leave.manage');
     }
     match /{document=**} { allow read, write: if false; }
   }
