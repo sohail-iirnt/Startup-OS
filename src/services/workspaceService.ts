@@ -22,17 +22,15 @@ export async function getWorkspaceMembers(workspaceId: string): Promise<Workspac
 export function subscribeToWorkspaceMember(workspaceId: string, userId: string, onChange: (member: WorkspaceMember | null) => void, onError?: (error: Error) => void): Unsubscribe { return onSnapshot(doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId), snapshot => onChange(snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as WorkspaceMember) : null), error => onError?.(error instanceof Error ? error : new Error('Unable to listen for workspace membership updates.'))) }
 export function subscribeToWorkspaceMembers(workspaceId: string, onChange: (members: WorkspaceMember[]) => void, onError?: (error: Error) => void): Unsubscribe { return onSnapshot(collection(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION), snapshot => onChange(snapshot.docs.map(item => ({ id: item.id, ...item.data() }) as WorkspaceMember).filter(member => member.status === 'active')), error => onError?.(error instanceof Error ? error : new Error('Unable to listen for workspace members.'))) }
 
-// Listen to the full membership subcollection and filter pending requests in the client.
-// This intentionally avoids a status query so Firestore evaluates the existing member
-// read authorization consistently for owners/admins/managers and the approval queue
-// updates immediately whenever any membership document changes.
 export function subscribeToPendingWorkspaceMembers(workspaceId: string, onChange: (members: WorkspaceMember[]) => void, onError?: (error: Error) => void): Unsubscribe {
+  const pendingQuery = query(collection(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION), where('status', '==', 'pending'))
   return onSnapshot(
-    collection(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION),
-    snapshot => onChange(snapshot.docs.map(item => ({ id: item.id, ...item.data() }) as WorkspaceMember).filter(member => member.status === 'pending')),
+    pendingQuery,
+    snapshot => onChange(snapshot.docs.map(item => ({ id: item.id, ...item.data() }) as WorkspaceMember)),
     error => onError?.(error instanceof Error ? error : new Error('Unable to listen for pending member approvals.')),
   )
 }
+
 export async function setWorkspaceMember(workspaceId: string, userId: string, role: UserRole = 'member', user?: User, status: WorkspaceMember['status'] = 'active'): Promise<void> { const memberRef = doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId); const existingSnapshot = await getDoc(memberRef); if (existingSnapshot.exists()) return; await setDoc(memberRef, { id: userId, workspaceId, userId, role, status, displayName: user?.displayName || user?.email?.split('@')[0] || 'Workspace Member', email: user?.email || '', photoURL: user?.photoURL || null, designation: role === 'owner' ? 'Founder' : role, grantedPermissions: [], deniedPermissions: [], joinedAt: serverTimestamp(), updatedAt: serverTimestamp() }) }
 export async function updateMemberPermissions(workspaceId: string, userId: string, grantedPermissions: WorkspacePermission[], deniedPermissions: WorkspacePermission[]): Promise<void> { await updateDoc(doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId), { grantedPermissions, deniedPermissions, updatedAt: serverTimestamp() }) }
 export async function updateMemberRole(workspaceId: string, userId: string, role: UserRole): Promise<void> { await updateDoc(doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId), { role, updatedAt: serverTimestamp() }) }
