@@ -1,4 +1,4 @@
-import { collection, collectionGroup, doc, getDoc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, type Unsubscribe } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, type Unsubscribe } from 'firebase/firestore'
 import type { User } from 'firebase/auth'
 import type { Workspace, WorkspaceMember } from '../types/workspace'
 import type { UserRole } from '../types/common'
@@ -8,6 +8,7 @@ import { db } from '../lib/firebase'
 
 const WORKSPACES_COLLECTION = 'workspaces'
 const MEMBERS_COLLECTION = 'members'
+const USERS_COLLECTION = 'users'
 const DEFAULT_WORKSPACE_NAME = 'WebAura By III'
 const DEFAULT_PORTAL_NAME = 'Startup OS'
 const DEFAULT_PORTAL_SUBTITLE = 'Founder Command Center'
@@ -25,15 +26,38 @@ export async function getWorkspaceMembers(workspaceId: string): Promise<Workspac
 export function subscribeToWorkspaceMember(workspaceId: string, userId: string, onChange: (member: WorkspaceMember | null) => void, onError?: (error: Error) => void): Unsubscribe { return onSnapshot(memberDocument(workspaceId, userId), snapshot => onChange(snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as WorkspaceMember) : null), error => onError?.(error instanceof Error ? error : new Error('Unable to listen for workspace membership updates.'))) }
 export function subscribeToWorkspaceMembers(workspaceId: string, onChange: (members: WorkspaceMember[]) => void, onError?: (error: Error) => void): Unsubscribe { return onSnapshot(memberCollection(workspaceId), snapshot => onChange(snapshot.docs.map(item => ({ id: item.id, ...item.data() }) as WorkspaceMember).filter(member => member.status === 'active')), error => onError?.(error instanceof Error ? error : new Error('Unable to listen for workspace members.'))) }
 
-// The approval queue uses a collection-group listener. This is deliberately independent
-// from the currently selected workspace query because that query was hiding valid pending
-// records when workspace context and membership initialization were out of sync.
+// Approval queue deliberately avoids a collection-group query. The existing ruleset
+// protects nested members, while users are already readable to authenticated users.
+// We use the user's workspace pointer when available and also inspect legacy profiles
+// whose pointer is still null, then read the exact membership document directly.
 export function subscribeToPendingWorkspaceMembers(workspaceId: string, onChange: (members: WorkspaceMember[]) => void, onError?: (error: Error) => void): Unsubscribe {
-  const pendingQuery = query(collectionGroup(db, MEMBERS_COLLECTION), where('status', '==', 'pending'))
-  return onSnapshot(pendingQuery, snapshot => {
-    const members = snapshot.docs.map(item => ({ id: item.id, ...item.data() }) as WorkspaceMember).filter(member => member.workspaceId === workspaceId && member.status === 'pending')
-    onChange(members)
-  }, error => onError?.(error instanceof Error ? error : new Error('Unable to listen for pending member approvals.')))
+  let cancelled = false
+  let retryTimer: ReturnType<typeof setTimeout> | undefined
+  const usersRef = collection(db, USERS_COLLECTION)
+
+  const refresh = async (userIds: string[]) => {
+    try {
+      const results = await Promise.all(userIds.map(userId => getWorkspaceMember(workspaceId, userId)))
+      if (!cancelled) onChange(results.filter((member): member is WorkspaceMember => Boolean(member && member.status === 'pending')))
+    } catch (error) {
+      if (!cancelled) onError?.(error instanceof Error ? error : new Error('Unable to load pending member approvals.'))
+    }
+  }
+
+  const unsubscribe = onSnapshot(usersRef, snapshot => {
+    const allUserIds = snapshot.docs.map(item => item.id)
+    void refresh(allUserIds)
+    // Membership creation follows user-profile creation. A short second read closes
+    // the small race where the user document snapshot arrives before the member write.
+    if (retryTimer) clearTimeout(retryTimer)
+    retryTimer = setTimeout(() => { void refresh(allUserIds) }, 700)
+  }, error => onError?.(error instanceof Error ? error : new Error('Unable to monitor registered users for approvals.')))
+
+  return () => {
+    cancelled = true
+    if (retryTimer) clearTimeout(retryTimer)
+    unsubscribe()
+  }
 }
 
 export async function setWorkspaceMember(workspaceId: string, userId: string, role: UserRole = 'member', user?: User, status: WorkspaceMember['status'] = 'active'): Promise<void> { const memberRef = memberDocument(workspaceId, userId); const existingSnapshot = await getDoc(memberRef); if (existingSnapshot.exists()) return; await setDoc(memberRef, { id: userId, workspaceId, userId, role, status, displayName: user?.displayName || user?.email?.split('@')[0] || 'Workspace Member', email: user?.email || '', photoURL: user?.photoURL || null, designation: role === 'owner' ? 'Founder' : role, grantedPermissions: [], deniedPermissions: [], joinedAt: serverTimestamp(), updatedAt: serverTimestamp() }) }
