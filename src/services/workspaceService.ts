@@ -1,11 +1,10 @@
 import { collection, doc, getDoc, getDocs, limit, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, type Unsubscribe } from 'firebase/firestore'
 import type { User } from 'firebase/auth'
-
-import { db } from '../lib/firebase'
 import type { Workspace, WorkspaceMember } from '../types/workspace'
 import type { UserRole } from '../types/common'
 import type { WorkspacePermission } from '../types/permissions'
 import { getUserProfile, setDefaultWorkspace } from './userService'
+import { db } from '../lib/firebase'
 
 const WORKSPACES_COLLECTION = 'workspaces'
 const MEMBERS_COLLECTION = 'members'
@@ -28,17 +27,12 @@ export async function createWorkspace(userId: string, name: string, description 
 }
 
 export async function getWorkspace(workspaceId: string): Promise<Workspace | null> {
-  const workspaceRef = doc(db, WORKSPACES_COLLECTION, workspaceId)
-  const snapshot = await getDoc(workspaceRef)
-  if (!snapshot.exists()) return null
-  return { id: snapshot.id, ...snapshot.data() } as Workspace
+  const snapshot = await getDoc(doc(db, WORKSPACES_COLLECTION, workspaceId))
+  return snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as Workspace) : null
 }
 
 export function subscribeToWorkspace(workspaceId: string, onChange: (workspace: Workspace | null) => void, onError?: (error: Error) => void): Unsubscribe {
-  const workspaceRef = doc(db, WORKSPACES_COLLECTION, workspaceId)
-  return onSnapshot(workspaceRef, (snapshot) => {
-    onChange(snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as Workspace) : null)
-  }, (error) => onError?.(error instanceof Error ? error : new Error('Unable to listen for workspace updates.')))
+  return onSnapshot(doc(db, WORKSPACES_COLLECTION, workspaceId), snapshot => onChange(snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as Workspace) : null), error => onError?.(error instanceof Error ? error : new Error('Unable to listen for workspace updates.')))
 }
 
 export async function updateWorkspaceBranding(workspaceId: string, portalName: string, portalSubtitle: string): Promise<void> {
@@ -46,38 +40,32 @@ export async function updateWorkspaceBranding(workspaceId: string, portalName: s
   const normalizedSubtitle = portalSubtitle.trim()
   if (!normalizedName) throw new Error('Portal name is required.')
   if (!normalizedSubtitle) throw new Error('Portal subtitle is required.')
-  const workspaceRef = doc(db, WORKSPACES_COLLECTION, workspaceId)
-  await updateDoc(workspaceRef, { portalName: normalizedName, portalSubtitle: normalizedSubtitle, updatedAt: serverTimestamp() })
+  await updateDoc(doc(db, WORKSPACES_COLLECTION, workspaceId), { portalName: normalizedName, portalSubtitle: normalizedSubtitle, updatedAt: serverTimestamp() })
 }
 
 export async function getWorkspaceMember(workspaceId: string, userId: string): Promise<WorkspaceMember | null> {
-  const memberRef = doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId)
-  const snapshot = await getDoc(memberRef)
-  if (!snapshot.exists()) return null
-  return { id: snapshot.id, ...snapshot.data() } as WorkspaceMember
+  const snapshot = await getDoc(doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId))
+  return snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as WorkspaceMember) : null
 }
 
-export async function getWorkspaceMemberDetails(workspaceId: string, userId: string): Promise<WorkspaceMember | null> {
-  return getWorkspaceMember(workspaceId, userId)
-}
+export async function getWorkspaceMemberDetails(workspaceId: string, userId: string): Promise<WorkspaceMember | null> { return getWorkspaceMember(workspaceId, userId) }
 
 export async function getWorkspaceMembers(workspaceId: string): Promise<WorkspaceMember[]> {
   const snapshot = await getDocs(collection(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION))
-  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as WorkspaceMember).filter((member) => member.status === 'active')
+  return snapshot.docs.map(item => ({ id: item.id, ...item.data() }) as WorkspaceMember).filter(member => member.status === 'active')
 }
 
 export function subscribeToWorkspaceMember(workspaceId: string, userId: string, onChange: (member: WorkspaceMember | null) => void, onError?: (error: Error) => void): Unsubscribe {
-  const memberRef = doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId)
-  return onSnapshot(memberRef, (snapshot) => {
-    onChange(snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as WorkspaceMember) : null)
-  }, (error) => onError?.(error instanceof Error ? error : new Error('Unable to listen for workspace membership updates.')))
+  return onSnapshot(doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId), snapshot => onChange(snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as WorkspaceMember) : null), error => onError?.(error instanceof Error ? error : new Error('Unable to listen for workspace membership updates.')))
 }
 
 export function subscribeToWorkspaceMembers(workspaceId: string, onChange: (members: WorkspaceMember[]) => void, onError?: (error: Error) => void): Unsubscribe {
-  const membersRef = collection(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION)
-  return onSnapshot(membersRef, (snapshot) => {
-    onChange(snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as WorkspaceMember).filter((member) => member.status === 'active'))
-  }, (error) => onError?.(error instanceof Error ? error : new Error('Unable to listen for workspace member updates.')))
+  return onSnapshot(collection(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION), snapshot => onChange(snapshot.docs.map(item => ({ id: item.id, ...item.data() }) as WorkspaceMember).filter(member => member.status === 'active')), error => onError?.(error instanceof Error ? error : new Error('Unable to listen for workspace members.')))
+}
+
+export function subscribeToPendingWorkspaceMembers(workspaceId: string, onChange: (members: WorkspaceMember[]) => void, onError?: (error: Error) => void): Unsubscribe {
+  const membersRef = query(collection(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION), where('status', '==', 'pending'))
+  return onSnapshot(membersRef, snapshot => onChange(snapshot.docs.map(item => ({ id: item.id, ...item.data() }) as WorkspaceMember)), error => onError?.(error instanceof Error ? error : new Error('Unable to listen for pending member approvals.')))
 }
 
 export async function setWorkspaceMember(workspaceId: string, userId: string, role: UserRole = 'member', user?: User, status: WorkspaceMember['status'] = 'active'): Promise<void> {
@@ -88,13 +76,11 @@ export async function setWorkspaceMember(workspaceId: string, userId: string, ro
 }
 
 export async function updateMemberPermissions(workspaceId: string, userId: string, grantedPermissions: WorkspacePermission[], deniedPermissions: WorkspacePermission[]): Promise<void> {
-  const memberRef = doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId)
-  await updateDoc(memberRef, { grantedPermissions, deniedPermissions, updatedAt: serverTimestamp() })
+  await updateDoc(doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId), { grantedPermissions, deniedPermissions, updatedAt: serverTimestamp() })
 }
 
 export async function updateMemberRole(workspaceId: string, userId: string, role: UserRole): Promise<void> {
-  const memberRef = doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId)
-  await updateDoc(memberRef, { role, updatedAt: serverTimestamp() })
+  await updateDoc(doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId), { role, updatedAt: serverTimestamp() })
 }
 
 async function findDefaultWorkspace(): Promise<Workspace | null> {
@@ -142,22 +128,18 @@ export async function requestWorkspaceMembership(workspaceId: string, user: User
   }
   await setDoc(memberRef, { id: user.uid, workspaceId: normalizedWorkspaceId, userId: user.uid, role: requestedRole, status: 'pending', displayName: user.displayName || user.email?.split('@')[0] || 'Workspace Member', email: user.email || '', photoURL: user.photoURL || null, designation: requestedRole, grantedPermissions: [], deniedPermissions: [], joinedAt: serverTimestamp(), updatedAt: serverTimestamp() })
   await setDefaultWorkspace(user.uid, normalizedWorkspaceId)
-  const createdSnapshot = await getDoc(memberRef)
-  return { id: createdSnapshot.id, ...createdSnapshot.data() } as WorkspaceMember
+  return { id: user.uid, workspaceId: normalizedWorkspaceId, userId: user.uid, role: requestedRole, status: 'pending', displayName: user.displayName || user.email?.split('@')[0] || 'Workspace Member', email: user.email || '', photoURL: user.photoURL || null, designation: requestedRole, grantedPermissions: [], deniedPermissions: [] } as WorkspaceMember
 }
 
 export async function approveWorkspaceMember(workspaceId: string, userId: string, role: UserRole = 'member'): Promise<void> {
-  const memberRef = doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId)
-  await updateDoc(memberRef, { role, status: 'active', designation: role === 'owner' ? 'Founder' : role, joinedAt: serverTimestamp(), updatedAt: serverTimestamp() })
+  await updateDoc(doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId), { role, status: 'active', designation: role === 'owner' ? 'Founder' : role, joinedAt: serverTimestamp(), updatedAt: serverTimestamp() })
 }
 
 export async function rejectWorkspaceMember(workspaceId: string, userId: string): Promise<void> {
-  const memberRef = doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId)
-  await updateDoc(memberRef, { status: 'rejected', updatedAt: serverTimestamp() })
+  await updateDoc(doc(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION, userId), { status: 'rejected', updatedAt: serverTimestamp() })
 }
 
 export async function getPendingWorkspaceMembers(workspaceId: string): Promise<WorkspaceMember[]> {
-  const membersRef = collection(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION)
-  const snapshot = await getDocs(query(membersRef, where('status', '==', 'pending')))
-  return snapshot.docs.map((item) => ({ id: item.id, ...item.data() }) as WorkspaceMember)
+  const snapshot = await getDocs(query(collection(db, WORKSPACES_COLLECTION, workspaceId, MEMBERS_COLLECTION), where('status', '==', 'pending')))
+  return snapshot.docs.map(item => ({ id: item.id, ...item.data() }) as WorkspaceMember)
 }
