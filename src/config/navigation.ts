@@ -14,6 +14,7 @@ import {
   MailPlus,
   ShieldCheck,
   Target,
+  UserCheck,
 } from 'lucide-react'
 import type { WorkspacePermission } from '../types/permissions'
 
@@ -40,6 +41,7 @@ export const navigationSections: NavigationSection[] = [
     { label: 'Tasks', path: '/tasks', icon: CheckSquare, permission: 'tasks.view' },
     { label: 'Team', path: '/team', icon: Users, permission: 'members.view' },
     { label: 'Invitations', path: '/team/invitations', icon: MailPlus, permission: 'members.approve' },
+    { label: 'Attendance', path: '/attendance', icon: UserCheck, permission: 'attendance.view' },
     { label: 'Calendar', path: '/calendar', icon: CalendarDays, permission: 'calendar.view' },
     { label: 'Goals & Targets', path: '/goals', icon: Target, permission: 'goals.view' },
   ] },
