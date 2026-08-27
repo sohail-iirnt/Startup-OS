@@ -83,6 +83,7 @@ function websitePayload(input: CreateWebsiteInput) {
     repositoryUrl: input.repositoryUrl?.trim() || null,
     technologyStack: input.technologyStack?.trim() || null,
     deploymentPlatform: input.deploymentPlatform?.trim() || null,
+    healthStatus: input.healthStatus ?? 'healthy',
   }
 }
 
