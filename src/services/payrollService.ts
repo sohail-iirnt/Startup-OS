@@ -37,14 +37,10 @@ function mapRecord(id: string, data: Record<string, unknown>): PayrollRecord {
 }
 
 export function subscribeToPayroll(workspaceId: string, onChange: (records: PayrollRecord[]) => void, onError?: (error: Error) => void): Unsubscribe {
-  // Deliberately avoid where + orderBy here: that combination can require a
-  // composite Firestore index and previously caused the Payroll screen to show
-  // no records even though the write had succeeded. Sort client-side instead.
   const q = query(collection(db, COLLECTION), where('workspaceId', '==', workspaceId))
   return onSnapshot(q, snapshot => {
-    const records = snapshot.docs
-      .map(item => mapRecord(item.id, item.data() as Record<string, unknown>))
-      .sort((a, b) => b.paidDate.getTime() - a.paidDate.getTime())
+    const records = snapshot.docs.map(item => mapRecord(item.id, item.data() as Record<string, unknown>))
+    records.sort((a, b) => asDate(b.paidDate).getTime() - asDate(a.paidDate).getTime())
     onChange(records)
   }, error => onError?.(error))
 }
