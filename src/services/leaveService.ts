@@ -17,4 +17,17 @@ export async function updateLeaveRequest(id: string, input: { workspaceId: strin
   await updateDoc(doc(db, COLLECTION, id), { status: 'cancelled', updatedAt: serverTimestamp(), replacedBy: newRequest.id })
 }
 export async function reviewLeaveRequest(id: string, status: Extract<LeaveStatus, 'approved' | 'rejected'>, reviewedBy: string, reviewNote = '') { await updateDoc(doc(db, COLLECTION, id), { status, reviewedBy, reviewNote: reviewNote.trim(), updatedAt: serverTimestamp() }) }
-export async function cancelLeaveRequest(id: string) { await deleteDoc(doc(db, COLLECTION, id)) }
+
+// Managers/admins/owners can permanently remove a request. For a normal user's
+// own pending request, Firestore intentionally allows cancellation (status change)
+// rather than deletion. Trying delete first lets the same UI action work for both
+// permission levels without weakening the Firestore rules.
+export async function cancelLeaveRequest(id: string) {
+  try {
+    await deleteDoc(doc(db, COLLECTION, id))
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : ''
+    if (code !== 'permission-denied') throw error
+    await updateDoc(doc(db, COLLECTION, id), { status: 'cancelled', updatedAt: serverTimestamp() })
+  }
+}
