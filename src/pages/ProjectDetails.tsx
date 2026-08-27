@@ -16,6 +16,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
+import ProjectFinance from '../components/projects/ProjectFinance'
 import ProjectModal from '../components/projects/ProjectModal'
 import TaskModal from '../components/tasks/TaskModal'
 import { useAuth } from '../context/useAuth'
@@ -714,6 +715,8 @@ function ProjectDetails() {
           )}
         </div>
       </Card>
+
+      <ProjectFinance project={project} />
 
       <Card className="mt-4 p-5">
         <h2 className="text-sm font-semibold text-[var(--os-text)]">
