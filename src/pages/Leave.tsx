@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { CalendarDays, Check, Edit3, Eye, MessageSquareText, Plus, Search, Trash2, X } from 'lucide-react'
 import Card from '../components/ui/Card'
 import ThemeSelect from '../components/ui/ThemeSelect'
@@ -11,50 +11,204 @@ import type { LeaveRequest, LeaveStatus, LeaveType } from '../types/leave'
 import type { WorkspaceMember } from '../types/workspace'
 
 const types: { value: LeaveType; label: string }[] = [
-  { value: 'casual', label: 'Casual leave' }, { value: 'sick', label: 'Sick leave' }, { value: 'earned', label: 'Earned leave' },
-  { value: 'traveling', label: 'Traveling leave' }, { value: 'unpaid', label: 'Unpaid leave' }, { value: 'other', label: 'Other / Custom' },
+  { value: 'casual', label: 'Casual leave' },
+  { value: 'sick', label: 'Sick leave' },
+  { value: 'earned', label: 'Earned leave' },
+  { value: 'traveling', label: 'Traveling leave' },
+  { value: 'unpaid', label: 'Unpaid leave' },
+  { value: 'other', label: 'Other / Custom' },
 ]
+
 const statusLabels: Record<LeaveStatus, string> = { pending: 'Pending', approved: 'Approved', rejected: 'Rejected', cancelled: 'Cancelled' }
 const inputClass = 'os-focus-ring h-11 w-full rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 text-sm text-[var(--os-text)]'
 
 export default function Leave() {
-  const { user } = useAuth(); const { workspace, hasPermission } = useWorkspace(); const workspaceId = workspace?.id; const userId = user?.uid
-  const canManage = hasPermission('leave.manage'); const canView = hasPermission('leave.view')
-  const [items, setItems] = useState<LeaveRequest[]>([]); const [members, setMembers] = useState<WorkspaceMember[]>([])
-  const [type, setType] = useState<LeaveType>('casual'); const [customType, setCustomType] = useState(''); const [mode, setMode] = useState<'single'|'range'>('single'); const [startDate, setStartDate] = useState(''); const [endDate, setEndDate] = useState(''); const [reason, setReason] = useState('')
-  const [editing, setEditing] = useState<LeaveRequest|null>(null); const [selected, setSelected] = useState<LeaveRequest|null>(null); const [deleteTarget, setDeleteTarget] = useState<LeaveRequest|null>(null)
-  const [reviewNote, setReviewNote] = useState<Record<string,string>>({}); const [statusFilter, setStatusFilter] = useState('all'); const [typeFilter, setTypeFilter] = useState('all'); const [search, setSearch] = useState(''); const [saving, setSaving] = useState(false); const [error, setError] = useState('')
+  const { user } = useAuth()
+  const { workspace, hasPermission } = useWorkspace()
+  const workspaceId = workspace?.id
+  const userId = user?.uid
+  const canManage = hasPermission('leave.manage')
+  const canView = hasPermission('leave.view')
+  const formRef = useRef<HTMLDivElement>(null)
+  const [items, setItems] = useState<LeaveRequest[]>([])
+  const [members, setMembers] = useState<WorkspaceMember[]>([])
+  const [type, setType] = useState<LeaveType>('casual')
+  const [customType, setCustomType] = useState('')
+  const [mode, setMode] = useState<'single' | 'range'>('single')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
+  const [reason, setReason] = useState('')
+  const [editing, setEditing] = useState<LeaveRequest | null>(null)
+  const [selected, setSelected] = useState<LeaveRequest | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<LeaveRequest | null>(null)
+  const [reviewNote, setReviewNote] = useState<Record<string, string>>({})
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [search, setSearch] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
 
-  useEffect(() => { if (!workspaceId || !userId || !canView) return undefined; return subscribeToLeaveRequests(workspaceId, userId, canManage, setItems, e => setError(e.message)) }, [workspaceId, userId, canView, canManage])
-  useEffect(() => { if (!workspaceId || !canManage) return undefined; return subscribeToWorkspaceMembers(workspaceId, setMembers, e => setError(e.message)) }, [workspaceId, canManage])
-  const active = useMemo(() => items.filter(i => i.status !== 'cancelled'), [items])
-  const filtered = useMemo(() => { const q=search.trim().toLowerCase(); return active.filter(i => { const p=members.find(m=>m.userId===i.userId)?.displayName || ''; return (statusFilter==='all'||i.status===statusFilter) && (typeFilter==='all'||i.type===typeFilter) && (!q||`${p} ${i.reason} ${i.customType||''}`.toLowerCase().includes(q)) }) }, [active, members, search, statusFilter, typeFilter])
-  const stats = useMemo(() => ({ total:active.length, pending:active.filter(i=>i.status==='pending').length, approved:active.filter(i=>i.status==='approved').length, rejected:active.filter(i=>i.status==='rejected').length }), [active])
-  const typeLabel = (i: LeaveRequest) => i.type==='other' ? i.customType||'Other / Custom' : types.find(t=>t.value===i.type)?.label || i.type
-  const person = (i: LeaveRequest) => members.find(m=>m.userId===i.userId)?.displayName || (i.userId===userId?'You':i.userId)
-  function reset() { setEditing(null); setType('casual'); setCustomType(''); setMode('single'); setStartDate(''); setEndDate(''); setReason('') }
-  function edit(item: LeaveRequest) { setEditing(item); setSelected(null); setType(item.type); setCustomType(item.customType||''); setMode(item.startDate===item.endDate?'single':'range'); setStartDate(item.startDate); setEndDate(item.endDate); setReason(item.reason); setError('') }
-  async function save() { if(!workspaceId||!userId||!startDate||!reason.trim()||(mode==='range'&&(!endDate||endDate<startDate))||(type==='other'&&!customType.trim())) return; setSaving(true); setError(''); try { const finalEnd=mode==='single'?startDate:endDate; if(editing) await updateLeaveRequest(editing.id,{workspaceId,userId,type,customType,startDate,endDate:finalEnd,reason}); else await createLeaveRequest({workspaceId,userId,type,customType,startDate,endDate:finalEnd,reason:reason.trim()}); reset() } catch(e) { setError(e instanceof Error?e.message:'Unable to save leave request.') } finally { setSaving(false) } }
-  async function remove() { if(!deleteTarget) return; setSaving(true); setError(''); try { await cancelLeaveRequest(deleteTarget.id); setDeleteTarget(null); setSelected(null) } catch(e) { setError(e instanceof Error?e.message:'Unable to delete leave request.') } finally { setSaving(false) } }
-  async function review(item: LeaveRequest,status:Extract<LeaveStatus,'approved'|'rejected'>) { const note=reviewNote[item.id]?.trim(); if(!userId||!note){setError('Please add a remark before approving or rejecting a leave request.');return} setSaving(true); setError(''); try { await reviewLeaveRequest(item.id,status,userId,note) } catch(e){setError(e instanceof Error?e.message:'Unable to update leave request.')} finally{setSaving(false)} }
-  if(!canView) return <div className="mx-auto max-w-[1400px] p-6"><Card className="p-8 text-center text-sm text-[var(--os-text-secondary)]">You do not have permission to view leave management.</Card></div>
-  const statusOptions=[{value:'all',label:'All statuses'},...Object.entries(statusLabels).map(([value,label])=>({value,label}))]
-  const typeOptions=[{value:'all',label:'All types'},...types]
+  useEffect(() => {
+    if (!workspaceId || !userId || !canView) return undefined
+    return subscribeToLeaveRequests(workspaceId, userId, canManage, setItems, (e) => setError(e.message))
+  }, [workspaceId, userId, canView, canManage])
+
+  useEffect(() => {
+    if (!workspaceId || !canManage) return undefined
+    return subscribeToWorkspaceMembers(workspaceId, setMembers, (e) => setError(e.message))
+  }, [workspaceId, canManage])
+
+  const active = useMemo(() => items.filter((item) => item.status !== 'cancelled'), [items])
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return active.filter((item) => {
+      const person = members.find((member) => member.userId === item.userId)?.displayName || ''
+      const matchesQuery = !q || `${person} ${item.reason} ${item.customType || ''} ${item.startDate} ${item.endDate}`.toLowerCase().includes(q)
+      return matchesQuery && (statusFilter === 'all' || item.status === statusFilter) && (typeFilter === 'all' || item.type === typeFilter)
+    })
+  }, [active, members, search, statusFilter, typeFilter])
+
+  const stats = useMemo(() => ({
+    total: active.length,
+    pending: active.filter((item) => item.status === 'pending').length,
+    approved: active.filter((item) => item.status === 'approved').length,
+    rejected: active.filter((item) => item.status === 'rejected').length,
+  }), [active])
+
+  const person = (item: LeaveRequest) => members.find((member) => member.userId === item.userId)?.displayName || (item.userId === userId ? 'You' : item.userId)
+  const displayType = (item: LeaveRequest) => item.type === 'other' ? item.customType || 'Other / Custom' : types.find((entry) => entry.value === item.type)?.label || item.type
+
+  function resetForm() {
+    setEditing(null)
+    setType('casual')
+    setCustomType('')
+    setMode('single')
+    setStartDate('')
+    setEndDate('')
+    setReason('')
+    setError('')
+  }
+
+  function startNewLeave() {
+    resetForm()
+    window.setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
+  }
+
+  function edit(item: LeaveRequest) {
+    setEditing(item)
+    setSelected(null)
+    setType(item.type)
+    setCustomType(item.customType || '')
+    setMode(item.startDate === item.endDate ? 'single' : 'range')
+    setStartDate(item.startDate)
+    setEndDate(item.endDate)
+    setReason(item.reason)
+    setError('')
+    window.setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
+  }
+
+  async function save() {
+    if (!workspaceId || !userId || !startDate || !reason.trim() || (mode === 'range' && (!endDate || endDate < startDate)) || (type === 'other' && !customType.trim())) return
+    setSaving(true)
+    setError('')
+    try {
+      const finalEnd = mode === 'single' ? startDate : endDate
+      if (editing) {
+        await updateLeaveRequest(editing.id, { workspaceId, userId, type, customType, startDate, endDate: finalEnd, reason: reason.trim() })
+      } else {
+        await createLeaveRequest({ workspaceId, userId, type, customType, startDate, endDate: finalEnd, reason: reason.trim() })
+      }
+      resetForm()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to save leave request.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function remove() {
+    if (!deleteTarget) return
+    setSaving(true)
+    setError('')
+    try {
+      await cancelLeaveRequest(deleteTarget.id)
+      setDeleteTarget(null)
+      setSelected(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to delete leave request.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function review(item: LeaveRequest, status: Extract<LeaveStatus, 'approved' | 'rejected'>) {
+    const note = reviewNote[item.id]?.trim()
+    if (!userId || !note) {
+      setError('Please add a remark before approving or rejecting a leave request.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      await reviewLeaveRequest(item.id, status, userId, note)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unable to update leave request.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!canView) return <div className="mx-auto max-w-[1400px] p-6"><Card className="p-8 text-center text-sm text-[var(--os-text-secondary)]">You do not have permission to view leave management.</Card></div>
+
+  const statusOptions = [{ value: 'all', label: 'All statuses' }, ...Object.entries(statusLabels).map(([value, label]) => ({ value, label }))]
+  const typeOptions = [{ value: 'all', label: 'All types' }, ...types]
+  const canEditOrDelete = (item: LeaveRequest) => item.status === 'pending' && (item.userId === userId || canManage)
+
   return <div className="mx-auto w-full max-w-[1500px] p-4 sm:p-6 lg:p-8">
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--os-accent)]">People & Operations</p><h1 className="mt-1 text-3xl font-semibold tracking-tight text-[var(--os-text)]">Leave Management</h1><p className="mt-2 text-sm text-[var(--os-text-secondary)]">Request leave, follow approvals and manage your leave history.</p></div><button type="button" onClick={reset} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[var(--os-accent)] px-4 text-sm font-semibold text-white"><Plus size={16}/> New leave request</button></div>
-    {error&&<div role="alert" className="mt-5 rounded-xl border border-[var(--os-danger)]/20 bg-[var(--os-danger-soft)] px-4 py-3 text-sm text-[var(--os-danger)]">{error}</div>}
-    <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Stat label="Active requests" value={stats.total}/><Stat label="Pending" value={stats.pending}/><Stat label="Approved" value={stats.approved}/><Stat label="Rejected" value={stats.rejected}/></div>
-    <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
-      <Card className="p-5 sm:p-6"><h2 className="text-sm font-semibold text-[var(--os-text)]">{editing?'Edit leave request':'Request leave'}</h2><p className="mt-1 text-xs text-[var(--os-text-muted)]">{editing?'Editing creates a fresh pending version and preserves the previous request as cancelled.':'Choose one day or a date range.'}</p><div className="mt-5 space-y-4">
-        <div className="grid grid-cols-2 gap-2 rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] p-1"><button type="button" onClick={()=>{setMode('single');setEndDate('')}} className={`h-9 rounded-lg text-xs font-semibold ${mode==='single'?'bg-[var(--os-accent-soft)] text-[var(--os-accent)]':'text-[var(--os-text-muted)]'}`}>Single day</button><button type="button" onClick={()=>setMode('range')} className={`h-9 rounded-lg text-xs font-semibold ${mode==='range'?'bg-[var(--os-accent-soft)] text-[var(--os-accent)]':'text-[var(--os-text-muted)]'}`}>Date range</button></div>
-        <ThemeSelect value={type} onChange={v=>setType(v as LeaveType)} options={types} placeholder="Leave type"/>{type==='other'&&<input value={customType} onChange={e=>setCustomType(e.target.value)} placeholder="Type your leave type" className={inputClass}/>}<div className={mode==='range'?'grid gap-3 sm:grid-cols-2':''}><label className="block"><span className="mb-1.5 block text-[11px] text-[var(--os-text-muted)]">{mode==='single'?'Leave date':'From date'}</span><input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} className={inputClass}/></label>{mode==='range'&&<label className="block"><span className="mb-1.5 block text-[11px] text-[var(--os-text-muted)]">To date</span><input type="date" min={startDate||undefined} value={endDate} onChange={e=>setEndDate(e.target.value)} className={inputClass}/></label>}</div><label className="block"><span className="mb-1.5 block text-[11px] text-[var(--os-text-muted)]">Reason of leave</span><textarea rows={5} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Explain the reason for your leave…" className="os-focus-ring w-full resize-y rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 py-2.5 text-sm text-[var(--os-text)]"/></label><div className="flex gap-2"><button type="button" disabled={saving||!startDate||!reason.trim()||(mode==='range'&&(!endDate||endDate<startDate))||(type==='other'&&!customType.trim())} onClick={()=>void save()} className="h-11 flex-1 rounded-xl bg-[var(--os-accent)] text-sm font-semibold text-white disabled:opacity-50">{saving?'Saving…':editing?'Update leave':'Submit leave request'}</button>{editing&&<button type="button" onClick={reset} className="h-11 rounded-xl border border-[var(--os-border)] px-4 text-sm font-semibold text-[var(--os-text)]">Cancel</button>}</div>
-      </div></Card>
-      <Card className="overflow-hidden"><div className="border-b border-[var(--os-border)] px-5 py-4 sm:px-6"><div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"><div><h2 className="text-sm font-semibold text-[var(--os-text)]">{canManage?'All workspace leave requests':'My leave requests'}</h2><p className="mt-1 text-xs text-[var(--os-text-muted)]">Click a card to view full details.</p></div><div className="flex flex-wrap gap-2"><div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--os-text-muted)]"/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search" className="h-9 w-44 rounded-lg border border-[var(--os-border)] bg-[var(--os-surface-raised)] pl-8 pr-3 text-xs text-[var(--os-text)]"/></div><ThemeSelect value={statusFilter} onChange={setStatusFilter} options={statusOptions} placeholder="Status"/><ThemeSelect value={typeFilter} onChange={setTypeFilter} options={typeOptions} placeholder="Type"/></div></div></div><div className="grid gap-3 p-4 sm:p-5">{filtered.length===0?<div className="p-10 text-center text-sm text-[var(--os-text-secondary)]">No matching leave requests.</div>:filtered.map(item=><LeaveCard key={item.id} item={item} person={person(item)} currentUserId={userId} canManage={canManage} saving={saving} reviewNote={reviewNote[item.id]||''} onOpen={()=>setSelected(item)} onEdit={()=>edit(item)} onDelete={()=>setDeleteTarget(item)} onReview={s=>void review(item,s)} onReviewNote={v=>setReviewNote(p=>({...p,[item.id]:v}))}/>)}</div></Card>
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--os-accent)]">People & Operations</p><h1 className="mt-1 text-3xl font-semibold tracking-tight text-[var(--os-text)]">Leave Management</h1><p className="mt-2 text-sm text-[var(--os-text-secondary)]">Request leave, follow approvals and manage your leave history.</p></div>
+      <button type="button" onClick={startNewLeave} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[var(--os-accent)] px-4 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"><Plus size={16} /> New leave request</button>
     </div>
-    {selected&&<Details item={selected} person={person(selected)} currentUserId={userId} onClose={()=>setSelected(null)} onEdit={()=>edit(selected)} onDelete={()=>setDeleteTarget(selected)}/>}<ConfirmDialog open={deleteTarget!==null} title="Delete leave request?" description="The request will be marked cancelled and removed from the active list." confirmLabel="Delete leave" loading={saving} onCancel={()=>!saving&&setDeleteTarget(null)} onConfirm={()=>void remove()}/>
+
+    {error && <div role="alert" className="mt-5 rounded-xl border border-[var(--os-danger)]/20 bg-[var(--os-danger-soft)] px-4 py-3 text-sm text-[var(--os-danger)]">{error}</div>}
+    <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Stat label="Active requests" value={stats.total} /><Stat label="Pending" value={stats.pending} /><Stat label="Approved" value={stats.approved} /><Stat label="Rejected" value={stats.rejected} /></div>
+
+    <div className="mt-6 grid min-w-0 gap-6 xl:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
+      <div ref={formRef} className="scroll-mt-6"><Card className="p-5 sm:p-6">
+        <div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold text-[var(--os-text)]">{editing ? 'Edit leave request' : 'Request leave'}</h2><p className="mt-1 text-xs text-[var(--os-text-muted)]">{editing ? 'Update the pending request and save it again.' : 'Choose one day or a date range.'}</p></div>{editing && <button type="button" onClick={resetForm} className="rounded-lg p-2 text-[var(--os-text-muted)] hover:bg-[var(--os-surface-hover)]" aria-label="Close edit"><X size={16} /></button>}</div>
+        <div className="mt-5 space-y-4">
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] p-1"><button type="button" onClick={() => { setMode('single'); setEndDate('') }} className={`h-9 rounded-lg text-xs font-semibold ${mode === 'single' ? 'bg-[var(--os-accent-soft)] text-[var(--os-accent)]' : 'text-[var(--os-text-muted)]'}`}>Single day</button><button type="button" onClick={() => setMode('range')} className={`h-9 rounded-lg text-xs font-semibold ${mode === 'range' ? 'bg-[var(--os-accent-soft)] text-[var(--os-accent)]' : 'text-[var(--os-text-muted)]'}`}>Date range</button></div>
+          <ThemeSelect value={type} onChange={(value) => setType(value as LeaveType)} options={types} placeholder="Leave type" />
+          {type === 'other' && <input value={customType} onChange={(event) => setCustomType(event.target.value)} placeholder="Type your leave type" className={inputClass} />}
+          <div className={mode === 'range' ? 'grid gap-3 sm:grid-cols-2' : ''}><label className="block"><span className="mb-1.5 block text-[11px] text-[var(--os-text-muted)]">{mode === 'single' ? 'Leave date' : 'From date'}</span><input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className={inputClass} /></label>{mode === 'range' && <label className="block"><span className="mb-1.5 block text-[11px] text-[var(--os-text-muted)]">To date</span><input type="date" min={startDate || undefined} value={endDate} onChange={(event) => setEndDate(event.target.value)} className={inputClass} /></label>}</div>
+          <label className="block"><span className="mb-1.5 block text-[11px] text-[var(--os-text-muted)]">Reason of leave</span><textarea rows={5} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Explain the reason for your leave…" className="os-focus-ring w-full resize-y rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 py-2.5 text-sm text-[var(--os-text)]" /></label>
+          <div className="flex gap-2"><button type="button" disabled={saving || !startDate || !reason.trim() || (mode === 'range' && (!endDate || endDate < startDate)) || (type === 'other' && !customType.trim())} onClick={() => void save()} className="h-11 flex-1 rounded-xl bg-[var(--os-accent)] text-sm font-semibold text-white disabled:opacity-50">{saving ? 'Saving…' : editing ? 'Update leave' : 'Submit leave request'}</button>{editing && <button type="button" onClick={resetForm} className="h-11 rounded-xl border border-[var(--os-border)] px-4 text-sm font-semibold text-[var(--os-text)]">Cancel</button>}</div>
+        </div>
+      </Card></div>
+
+      <Card className="overflow-hidden"><div className="border-b border-[var(--os-border)] px-5 py-4 sm:px-6"><div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"><div><h2 className="text-sm font-semibold text-[var(--os-text)]">{canManage ? 'All workspace leave requests' : 'My leave requests'}</h2><p className="mt-1 text-xs text-[var(--os-text-muted)]">Click a card to view details. Use the card actions to edit or delete pending requests.</p></div><div className="flex flex-wrap gap-2"><div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--os-text-muted)]" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search" className="h-9 w-44 rounded-lg border border-[var(--os-border)] bg-[var(--os-surface-raised)] pl-8 pr-3 text-xs text-[var(--os-text)]" /></div><ThemeSelect value={statusFilter} onChange={setStatusFilter} options={statusOptions} placeholder="Status" /><ThemeSelect value={typeFilter} onChange={setTypeFilter} options={typeOptions} placeholder="Type" /></div></div></div>
+        <div className="grid gap-3 p-4 sm:p-5">{filtered.length === 0 ? <div className="p-10 text-center text-sm text-[var(--os-text-secondary)]">No matching leave requests.</div> : filtered.map((item) => <LeaveCard key={item.id} item={item} person={person(item)} canManage={canManage} canEditOrDelete={canEditOrDelete(item)} saving={saving} reviewNote={reviewNote[item.id] || ''} onOpen={() => setSelected(item)} onEdit={() => edit(item)} onDelete={() => setDeleteTarget(item)} onReview={(status) => void review(item, status)} onReviewNote={(value) => setReviewNote((current) => ({ ...current, [item.id]: value }))} />)}</div>
+      </Card>
+    </div>
+
+    {selected && <Details item={selected} person={person(selected)} canEditOrDelete={canEditOrDelete(selected)} onClose={() => setSelected(null)} onEdit={() => edit(selected)} onDelete={() => setDeleteTarget(selected)} />}
+    <ConfirmDialog open={deleteTarget !== null} title="Delete leave request?" description={<>This will cancel <strong className="text-[var(--os-text)]">{deleteTarget ? displayType(deleteTarget) : 'this leave request'}</strong> and remove it from the active list.</>} confirmLabel="Delete leave" loading={saving} onCancel={() => !saving && setDeleteTarget(null)} onConfirm={() => void remove()} />
   </div>
 }
-function Stat({label,value}:{label:string;value:number}){return <Card className="p-4"><p className="text-xs text-[var(--os-text-muted)]">{label}</p><p className="mt-1 text-2xl font-semibold text-[var(--os-text)]">{value}</p></Card>}
-function LeaveCard({item,person,currentUserId,canManage,saving,reviewNote,onOpen,onEdit,onDelete,onReview,onReviewNote}:{item:LeaveRequest;person:string;currentUserId?:string;canManage:boolean;saving:boolean;reviewNote:string;onOpen:()=>void;onEdit:()=>void;onDelete:()=>void;onReview:(status:Extract<LeaveStatus,'approved'|'rejected'>)=>void;onReviewNote:(value:string)=>void}){const ownPending=item.userId===currentUserId&&item.status==='pending';return <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpen()}}} className="cursor-pointer rounded-2xl border border-[var(--os-border)] bg-[var(--os-surface)] p-4 transition hover:border-[var(--os-accent)]/40 hover:bg-[var(--os-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--os-accent)]"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><CalendarDays size={16} className="text-[var(--os-accent)]"/><span className="text-sm font-semibold text-[var(--os-text)]">{item.type==='other'?item.customType||'Other / Custom':types.find(t=>t.value===item.type)?.label||item.type}</span><span className="rounded-full bg-[var(--os-accent-soft)] px-2.5 py-1 text-[10px] font-semibold text-[var(--os-accent)]">{statusLabels[item.status]}</span></div><p className="mt-2 text-xs text-[var(--os-text-muted)]">{person} · {item.startDate===item.endDate?item.startDate:`${item.startDate} → ${item.endDate}`}</p></div><Eye size={16} className="text-[var(--os-text-muted)]"/></div><p className="mt-3 line-clamp-2 text-sm leading-6 text-[var(--os-text-secondary)]">{item.reason}</p><div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--os-border)] pt-3">{ownPending&&<><button type="button" onClick={e=>{e.stopPropagation();onEdit()}} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--os-border)] px-3 text-xs font-semibold text-[var(--os-text)]"><Edit3 size={14}/> Edit</button><button type="button" onClick={e=>{e.stopPropagation();onDelete()}} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--os-danger)]/25 px-3 text-xs font-semibold text-[var(--os-danger)]"><Trash2 size={14}/> Delete</button></>}{canManage&&item.status==='pending'&&<div className="flex w-full flex-col gap-2 rounded-xl bg-[var(--os-surface-raised)] p-3 sm:flex-row" onClick={e=>e.stopPropagation()}><input value={reviewNote} onChange={e=>onReviewNote(e.target.value)} placeholder="Required approval remark…" className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--os-border)] bg-[var(--os-surface)] px-3 text-xs text-[var(--os-text)]"/><button type="button" disabled={saving||!reviewNote.trim()} onClick={()=>onReview('approved')} className="inline-flex h-9 items-center justify-center gap-1 rounded-lg bg-[var(--os-success)] px-3 text-xs font-semibold text-white disabled:opacity-50"><Check size={14}/> Approve</button><button type="button" disabled={saving||!reviewNote.trim()} onClick={()=>onReview('rejected')} className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-[var(--os-danger)]/30 px-3 text-xs font-semibold text-[var(--os-danger)] disabled:opacity-50"><X size={14}/> Reject</button></div>}</div></div>}
-function Details({item,person,currentUserId,onClose,onEdit,onDelete}:{item:LeaveRequest;person:string;currentUserId?:string;onClose:()=>void;onEdit:()=>void;onDelete:()=>void}){const ownPending=item.userId===currentUserId&&item.status==='pending';return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}><div role="dialog" aria-modal="true" onClick={e=>e.stopPropagation()} className="w-full max-w-xl rounded-2xl border border-[var(--os-border)] bg-[var(--os-surface)] p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--os-accent)]">Leave request</p><h2 className="mt-1 text-xl font-semibold text-[var(--os-text)]">{item.type==='other'?item.customType||'Other / Custom':types.find(t=>t.value===item.type)?.label||item.type}</h2></div><button type="button" onClick={onClose} className="rounded-lg p-2 text-[var(--os-text-muted)]"><X size={18}/></button></div><div className="mt-6 grid gap-3 sm:grid-cols-2"><Info label="Employee" value={person}/><Info label="Status" value={statusLabels[item.status]}/><Info label="From" value={item.startDate}/><Info label="To" value={item.endDate}/></div><div className="mt-4 rounded-xl bg-[var(--os-surface-raised)] p-4"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--os-text-muted)]">Reason</p><p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--os-text-secondary)]">{item.reason}</p></div>{item.reviewNote&&<div className="mt-4 rounded-xl border border-[var(--os-border)] p-4"><div className="flex items-center gap-2 text-xs font-semibold text-[var(--os-text)]"><MessageSquareText size={14} className="text-[var(--os-accent)]"/> Approver remark</div><p className="mt-2 whitespace-pre-wrap text-sm text-[var(--os-text-secondary)]">{item.reviewNote}</p></div>}<div className="mt-6 flex justify-end gap-2">{ownPending&&<><button type="button" onClick={onEdit} className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-[var(--os-border)] px-4 text-xs font-semibold text-[var(--os-text)]"><Edit3 size={14}/> Edit</button><button type="button" onClick={onDelete} className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-[var(--os-danger)]/25 px-4 text-xs font-semibold text-[var(--os-danger)]"><Trash2 size={14}/> Delete</button></>}</div></div></div>}
-function Info({label,value}:{label:string;value:string}){return <div className="rounded-xl border border-[var(--os-border)] p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--os-text-muted)]">{label}</p><p className="mt-1 text-sm font-medium text-[var(--os-text)]">{value}</p></div>}
+
+function Stat({ label, value }: { label: string; value: number }) { return <Card className="p-4"><p className="text-xs text-[var(--os-text-muted)]">{label}</p><p className="mt-1 text-2xl font-semibold text-[var(--os-text)]">{value}</p></Card> }
+
+function LeaveCard({ item, person, canManage, canEditOrDelete, saving, reviewNote, onOpen, onEdit, onDelete, onReview, onReviewNote }: { item: LeaveRequest; person: string; canManage: boolean; canEditOrDelete: boolean; saving: boolean; reviewNote: string; onOpen: () => void; onEdit: () => void; onDelete: () => void; onReview: (status: Extract<LeaveStatus, 'approved' | 'rejected'>) => void; onReviewNote: (value: string) => void }) {
+  return <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onOpen() } }} className="cursor-pointer rounded-2xl border border-[var(--os-border)] bg-[var(--os-surface)] p-4 transition hover:border-[var(--os-accent)]/40 hover:bg-[var(--os-surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--os-accent)]">
+    <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><CalendarDays size={16} className="text-[var(--os-accent)]" /><span className="text-sm font-semibold text-[var(--os-text)]">{item.type === 'other' ? item.customType || 'Other / Custom' : types.find((entry) => entry.value === item.type)?.label || item.type}</span><span className="rounded-full bg-[var(--os-accent-soft)] px-2.5 py-1 text-[10px] font-semibold text-[var(--os-accent)]">{statusLabels[item.status]}</span></div><p className="mt-2 text-xs text-[var(--os-text-muted)]">{person} · {item.startDate === item.endDate ? item.startDate : `${item.startDate} → ${item.endDate}`}</p></div><Eye size={16} className="text-[var(--os-text-muted)]" /></div>
+    <p className="mt-3 line-clamp-2 text-sm leading-6 text-[var(--os-text-secondary)]">{item.reason}</p>
+    {canEditOrDelete && <div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--os-border)] pt-3"><button type="button" onClick={(event) => { event.stopPropagation(); onEdit() }} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--os-border)] px-3 text-xs font-semibold text-[var(--os-text)] hover:bg-[var(--os-surface-hover)]"><Edit3 size={14} /> Edit</button><button type="button" onClick={(event) => { event.stopPropagation(); onDelete() }} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--os-danger)]/25 px-3 text-xs font-semibold text-[var(--os-danger)] hover:bg-[var(--os-danger-soft)]"><Trash2 size={14} /> Delete</button></div>}
+    {canManage && item.status === 'pending' && <div className="mt-4 border-t border-[var(--os-border)] pt-4" onClick={(event) => event.stopPropagation()}><div className="flex items-center gap-2 text-xs font-semibold text-[var(--os-text)]"><MessageSquareText size={14} /> Manager decision</div><textarea rows={2} value={reviewNote} onChange={(event) => onReviewNote(event.target.value)} placeholder="Add approval / rejection remark…" className="mt-2 w-full resize-none rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] px-3 py-2 text-xs text-[var(--os-text)] outline-none focus:border-[var(--os-accent)]" /><div className="mt-2 flex gap-2"><button type="button" disabled={saving} onClick={() => onReview('approved')} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--os-accent)] px-3 text-xs font-semibold text-white disabled:opacity-50"><Check size={14} /> Approve</button><button type="button" disabled={saving} onClick={() => onReview('rejected')} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[var(--os-danger)]/25 px-3 text-xs font-semibold text-[var(--os-danger)] disabled:opacity-50">Reject</button></div></div>}
+  </div>
+}
+
+function Details({ item, person, canEditOrDelete, onClose, onEdit, onDelete }: { item: LeaveRequest; person: string; canEditOrDelete: boolean; onClose: () => void; onEdit: () => void; onDelete: () => void }) {
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" onMouseDown={onClose}><div className="w-full max-w-xl rounded-2xl border border-[var(--os-border)] bg-[var(--os-surface)] shadow-2xl" onMouseDown={(event) => event.stopPropagation()}><div className="flex items-start justify-between gap-4 border-b border-[var(--os-border)] p-5"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--os-accent)]">Leave details</p><h2 className="mt-1 text-xl font-semibold text-[var(--os-text)]">{item.type === 'other' ? item.customType || 'Other / Custom' : types.find((entry) => entry.value === item.type)?.label || item.type}</h2></div><button type="button" onClick={onClose} className="rounded-lg p-2 text-[var(--os-text-muted)] hover:bg-[var(--os-surface-hover)]"><X size={18} /></button></div><div className="space-y-4 p-5"><Detail label="Employee" value={person} /><Detail label="Dates" value={item.startDate === item.endDate ? item.startDate : `${item.startDate} → ${item.endDate}`} /><Detail label="Status" value={statusLabels[item.status]} /><Detail label="Reason" value={item.reason} multiline />{item.reviewNote && <Detail label="Manager remark" value={item.reviewNote} multiline />}</div><div className="flex justify-end gap-2 border-t border-[var(--os-border)] p-5">{canEditOrDelete && <><button type="button" onClick={onEdit} className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-[var(--os-border)] px-3 text-xs font-semibold text-[var(--os-text)]"><Edit3 size={14} /> Edit</button><button type="button" onClick={onDelete} className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-[var(--os-danger)]/25 px-3 text-xs font-semibold text-[var(--os-danger)]"><Trash2 size={14} /> Delete</button></>}<button type="button" onClick={onClose} className="h-10 rounded-lg bg-[var(--os-accent)] px-4 text-xs font-semibold text-white">Close</button></div></div></div>
+}
+
+function Detail({ label, value, multiline = false }: { label: string; value: string; multiline?: boolean }) { return <div><p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--os-text-muted)]">{label}</p><p className={`mt-1 text-sm text-[var(--os-text)] ${multiline ? 'whitespace-pre-wrap leading-6' : 'font-medium'}`}>{value}</p></div> }
