@@ -40,11 +40,11 @@ export default function ProjectFinance({ project }: { project: Project }) {
     if (workspaceLoading || !workspace?.id) return undefined
     const workspaceId = workspace.id
     return onSnapshot(query(collection(db, 'financeEntries'), where('workspaceId', '==', workspaceId)), (snapshot) => {
-      const next = snapshot.docs
+      const next: ProjectEntry[] = snapshot.docs
         .filter((item) => item.data().projectId === project.id)
         .map((item) => {
           const data = item.data()
-          return { id: item.id, type: data.type === 'expense' ? 'expense' : 'income', amount: Number(data.amount ?? 0), category: String(data.category ?? 'General'), description: String(data.description ?? ''), date: asDate(data.date), method: String(data.method ?? ''), party: String(data.party ?? '') }
+          return { id: item.id, type: data.type === 'expense' ? 'expense' : 'income' as ProjectEntryType, amount: Number(data.amount ?? 0), category: String(data.category ?? 'General'), description: String(data.description ?? ''), date: asDate(data.date), method: String(data.method ?? ''), party: String(data.party ?? '') }
         })
         .sort((a, b) => b.date.getTime() - a.date.getTime())
       setEntries(next)
