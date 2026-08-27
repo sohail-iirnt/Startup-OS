@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where, type Unsubscribe } from 'firebase/firestore'
+import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where, type Unsubscribe } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import type { LeaveRequest, LeaveStatus, LeaveType } from '../types/leave'
 
@@ -17,4 +17,4 @@ export async function updateLeaveRequest(id: string, input: { workspaceId: strin
   await updateDoc(doc(db, COLLECTION, id), { status: 'cancelled', updatedAt: serverTimestamp(), replacedBy: newRequest.id })
 }
 export async function reviewLeaveRequest(id: string, status: Extract<LeaveStatus, 'approved' | 'rejected'>, reviewedBy: string, reviewNote = '') { await updateDoc(doc(db, COLLECTION, id), { status, reviewedBy, reviewNote: reviewNote.trim(), updatedAt: serverTimestamp() }) }
-export async function cancelLeaveRequest(id: string) { await updateDoc(doc(db, COLLECTION, id), { status: 'cancelled', updatedAt: serverTimestamp() }) }
+export async function cancelLeaveRequest(id: string) { await deleteDoc(doc(db, COLLECTION, id)) }
