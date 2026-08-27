@@ -17,6 +17,17 @@ export type WebsiteStatus =
   | 'paused'
   | 'expired'
 
+export type RenewalFrequency =
+  | 'monthly'
+  | 'quarterly'
+  | 'yearly'
+  | 'custom'
+
+export type WebsiteHealthStatus =
+  | 'healthy'
+  | 'attention'
+  | 'critical'
+
 export type Website = {
   id: ID
   name: string
@@ -29,10 +40,21 @@ export type Website = {
   maintenanceOpted: boolean
   monthlyMaintenanceCharge: number
   notes: string
-} & Omit<
-  BaseEntity,
-  'createdBy'
->
+  projectId?: string
+  projectName?: string
+  clientId?: string
+  domainName?: string
+  domainRenewalDate?: Date
+  domainRenewalAmount?: number
+  hostingRenewalDate?: Date
+  hostingRenewalAmount?: number
+  maintenanceFrequency?: RenewalFrequency
+  maintenanceRenewalDate?: Date
+  repositoryUrl?: string
+  technologyStack?: string
+  deploymentPlatform?: string
+  healthStatus?: WebsiteHealthStatus
+} & Omit<BaseEntity, 'createdBy'>
 
 export type CreateWebsiteInput = {
   name: string
@@ -45,4 +67,17 @@ export type CreateWebsiteInput = {
   maintenanceOpted: boolean
   monthlyMaintenanceCharge: number
   notes: string
+  projectId?: string
+  projectName?: string
+  clientId?: string
+  domainName?: string
+  domainRenewalDate?: Date | null
+  domainRenewalAmount?: number
+  hostingRenewalDate?: Date | null
+  hostingRenewalAmount?: number
+  maintenanceFrequency?: RenewalFrequency
+  maintenanceRenewalDate?: Date | null
+  repositoryUrl?: string
+  technologyStack?: string
+  deploymentPlatform?: string
 }
