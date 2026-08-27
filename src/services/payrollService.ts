@@ -1,4 +1,4 @@
-import { collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, where, writeBatch, type Unsubscribe } from 'firebase/firestore'
+import { collection, doc, onSnapshot, orderBy, query, serverTimestamp, where, writeBatch, type Unsubscribe } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import type { PayrollForm, PayrollRecord } from '../types/payroll'
 
@@ -14,25 +14,13 @@ function asDate(value: unknown): Date {
 
 function mapRecord(id: string, data: Record<string, unknown>): PayrollRecord {
   return {
-    id,
-    workspaceId: String(data.workspaceId ?? ''),
-    paidToUserId: data.paidToUserId ? String(data.paidToUserId) : undefined,
-    paidTo: String(data.paidTo ?? ''),
-    recipientType: (data.recipientType as PayrollRecord['recipientType']) ?? 'other',
-    paymentType: (data.paymentType as PayrollRecord['paymentType']) ?? 'custom',
-    customPaymentType: data.customPaymentType ? String(data.customPaymentType) : undefined,
-    paidDate: asDate(data.paidDate),
-    paymentMethod: (data.paymentMethod as PayrollRecord['paymentMethod']) ?? 'online',
-    paidBy: String(data.paidBy ?? ''),
-    periodStart: data.periodStart ? String(data.periodStart) : undefined,
-    periodEnd: data.periodEnd ? String(data.periodEnd) : undefined,
-    baseAmount: Number(data.baseAmount ?? 0),
-    incentiveAmount: Number(data.incentiveAmount ?? 0),
-    totalAmount: Number(data.totalAmount ?? 0),
-    notes: data.notes ? String(data.notes) : undefined,
-    createdBy: String(data.createdBy ?? ''),
-    createdAt: data.createdAt ? asDate(data.createdAt) : undefined,
-    updatedAt: data.updatedAt ? asDate(data.updatedAt) : undefined,
+    id, workspaceId: String(data.workspaceId ?? ''), paidToUserId: data.paidToUserId ? String(data.paidToUserId) : undefined,
+    paidTo: String(data.paidTo ?? ''), recipientType: (data.recipientType as PayrollRecord['recipientType']) ?? 'other',
+    paymentType: (data.paymentType as PayrollRecord['paymentType']) ?? 'custom', customPaymentType: data.customPaymentType ? String(data.customPaymentType) : undefined,
+    paidDate: asDate(data.paidDate), paymentMethod: (data.paymentMethod as PayrollRecord['paymentMethod']) ?? 'online', paidBy: String(data.paidBy ?? ''),
+    periodStart: data.periodStart ? String(data.periodStart) : undefined, periodEnd: data.periodEnd ? String(data.periodEnd) : undefined,
+    baseAmount: Number(data.baseAmount ?? 0), incentiveAmount: Number(data.incentiveAmount ?? 0), totalAmount: Number(data.totalAmount ?? 0),
+    notes: data.notes ? String(data.notes) : undefined, createdBy: String(data.createdBy ?? ''), createdAt: data.createdAt ? asDate(data.createdAt) : undefined, updatedAt: data.updatedAt ? asDate(data.updatedAt) : undefined,
   }
 }
 
@@ -49,14 +37,13 @@ export async function savePayroll(workspaceId: string, userId: string, form: Pay
   if (form.periodStart && form.periodEnd && form.periodEnd < form.periodStart) throw new Error('Payroll period end date cannot be before the start date.')
   const paymentType = form.paymentType === 'custom' ? (form.customPaymentType.trim() || 'Other') : form.paymentType
   const payrollRef = existingId ? doc(db, COLLECTION, existingId) : doc(collection(db, COLLECTION))
-  const financeRef = existingId ? doc(db, FINANCE_COLLECTION, `payroll-${existingId}`) : doc(collection(db, FINANCE_COLLECTION))
+  const financeRef = doc(db, FINANCE_COLLECTION, `payroll-${payrollRef.id}`)
   const batch = writeBatch(db)
   const payrollData = {
-    workspaceId, paidToUserId: form.paidToUserId || null, paidTo: form.paidTo.trim(), recipientType: form.recipientType,
-    paymentType, customPaymentType: form.paymentType === 'custom' ? form.customPaymentType.trim() : null,
-    paidDate: new Date(`${form.paidDate}T12:00:00`), paymentMethod: form.paymentMethod, paidBy: form.paidBy.trim(),
-    periodStart: form.periodStart || null, periodEnd: form.periodEnd || null, baseAmount, incentiveAmount, totalAmount,
-    notes: form.notes.trim(), createdBy: userId, updatedAt: serverTimestamp(),
+    workspaceId, paidToUserId: form.paidToUserId || null, paidTo: form.paidTo.trim(), recipientType: form.recipientType, paymentType,
+    customPaymentType: form.paymentType === 'custom' ? form.customPaymentType.trim() : null, paidDate: new Date(`${form.paidDate}T12:00:00`),
+    paymentMethod: form.paymentMethod, paidBy: form.paidBy.trim(), periodStart: form.periodStart || null, periodEnd: form.periodEnd || null,
+    baseAmount, incentiveAmount, totalAmount, notes: form.notes.trim(), createdBy: userId, updatedAt: serverTimestamp(),
   }
   if (existingId) batch.update(payrollRef, payrollData)
   else batch.set(payrollRef, { ...payrollData, createdAt: serverTimestamp() })
