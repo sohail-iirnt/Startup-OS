@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from 'firebase/firestore'
+import { collection, onSnapshot, query, where } from 'firebase/firestore'
 import { ArrowDownRight, ArrowUpRight, CircleDollarSign, Eye, Pencil, Trash2, Wallet } from 'lucide-react'
 import Button from '../ui/Button'
 import Card from '../ui/Card'
@@ -9,6 +9,7 @@ import ThemeSelect from '../ui/ThemeSelect'
 import { useAuth } from '../../context/useAuth'
 import { useWorkspace } from '../../context/useWorkspace'
 import { db } from '../../lib/firebase'
+import { createProjectFinanceEntry, deleteProjectFinanceEntry, updateProjectFinanceEntry } from '../../services/financeService'
 import type { Project } from '../../types/project'
 
 type ProjectEntryType = 'income' | 'expense'
@@ -55,12 +56,24 @@ export default function ProjectFinance({ project }: { project: Project }) {
     const expenses = entries.filter((entry) => entry.type === 'expense').reduce((sum, entry) => sum + entry.amount, 0)
     const profit = income - expenses
     const budget = Number(project.budget || 0)
-    return { income, expenses, profit, budget, remaining: budget - expenses, budgetUsed: budget > 0 ? Math.round((expenses / budget) * 100) : 0, margin: income > 0 ? Math.round((profit / income) * 100) : 0 }
-  }, [entries, project.budget])
+    const projectValue = Number(project.projectValue || 0)
+    const collectionRate = projectValue > 0 ? Math.round((income / projectValue) * 100) : 0
+    const budgetUsed = budget > 0 ? Math.round((expenses / budget) * 100) : 0
+    return { income, expenses, profit, budget, remaining: budget - expenses, budgetUsed, margin: income > 0 ? Math.round((profit / income) * 100) : 0, collectionRate }
+  }, [entries, project.budget, project.projectValue])
 
   const categories = form.type === 'income' ? incomeCategories : expenseCategories
   const projectValue = Number(project.projectValue || 0)
   const collectionRemaining = projectValue - totals.income
+  const financialHealth = totals.budget <= 0
+    ? 'Budget not set'
+    : totals.remaining < 0
+      ? 'Over budget'
+      : totals.budgetUsed >= 90
+        ? 'Budget watch'
+        : totals.profit < 0
+          ? 'Loss making'
+          : 'Healthy'
 
   function resetForm() {
     setEditing(null)
@@ -80,9 +93,9 @@ export default function ProjectFinance({ project }: { project: Project }) {
     try {
       const category = form.category.trim()
       if (!category) throw new Error('Category is required.')
-      const data = { workspaceId: workspace.id, projectId: project.id, projectName: project.name, clientId: project.clientId || '', clientName: project.clientName || '', type: form.type, amount: Number(form.amount), category, description: form.description.trim(), date: new Date(`${form.date}T12:00:00`), method: form.method, party: form.party.trim(), partyType: 'project', createdBy: user.uid, updatedAt: serverTimestamp() }
-      if (editing) await updateDoc(doc(db, 'financeEntries', editing.id), data)
-      else await addDoc(collection(db, 'financeEntries'), { ...data, createdAt: serverTimestamp() })
+      const data = { workspaceId: workspace.id, projectId: project.id, projectName: project.name, clientId: project.clientId || '', clientName: project.clientName || '', type: form.type, amount: Number(form.amount), category, description: form.description.trim(), date: new Date(`${form.date}T12:00:00`), method: form.method, party: form.party.trim(), createdBy: user.uid }
+      if (editing) await updateProjectFinanceEntry(editing.id, data)
+      else await createProjectFinanceEntry(data)
       resetForm()
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Could not save project transaction.')
@@ -96,7 +109,7 @@ export default function ProjectFinance({ project }: { project: Project }) {
     setDeleting(true)
     setError('')
     try {
-      await deleteDoc(doc(db, 'financeEntries', deleteTarget.id))
+      await deleteProjectFinanceEntry(deleteTarget.id)
       setDeleteTarget(null)
       setDetail(null)
     } catch {
@@ -117,20 +130,25 @@ export default function ProjectFinance({ project }: { project: Project }) {
       <Metric label="Budget Remaining" value={money(totals.remaining)} icon={<Wallet size={16} />} />
       <Metric label="Margin" value={totals.income ? `${totals.margin}%` : '—'} icon={<CircleDollarSign size={16} />} />
     </div>
-    <div className="mt-5 grid gap-4 lg:grid-cols-2">
+    <div className="mt-5 grid gap-4 lg:grid-cols-3">
       <div className="rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] p-4">
         <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--os-text-muted)]">Budget utilization</p><p className="mt-1 text-sm text-[var(--os-text-secondary)]">{totals.budget ? `${totals.budgetUsed}% of ${money(totals.budget)} used` : 'No project budget set'}</p></div><span className={`text-sm font-bold ${totals.budgetUsed > 100 ? 'text-[var(--os-danger)]' : 'text-[var(--os-text)]'}`}>{totals.budget ? `${totals.budgetUsed}%` : '—'}</span></div>
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--os-surface-hover)]"><div className={`h-full rounded-full ${totals.budgetUsed > 100 ? 'bg-[var(--os-danger)]' : 'bg-[var(--os-accent)]'}`} style={{ width: `${Math.min(100, totals.budgetUsed)}%` }} /></div>
         {totals.budget && totals.remaining < 0 && <p className="mt-2 text-xs font-medium text-[var(--os-danger)]">Budget exceeded by {money(Math.abs(totals.remaining))}.</p>}
       </div>
       <div className="rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] p-4">
-        <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--os-text-muted)]">Revenue collection</p><p className="mt-1 text-sm text-[var(--os-text-secondary)]">{projectValue ? `${Math.min(100, Math.max(0, Math.round((totals.income / projectValue) * 100)))}% of project value recorded` : 'No project value set'}</p></div><span className="text-sm font-bold text-[var(--os-text)]">{projectValue ? money(Math.max(0, collectionRemaining)) : '—'}</span></div>
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--os-surface-hover)]"><div className="h-full rounded-full bg-[var(--os-success)]" style={{ width: `${projectValue ? Math.min(100, Math.max(0, (totals.income / projectValue) * 100)) : 0}%` }} /></div>
+        <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--os-text-muted)]">Revenue collection</p><p className="mt-1 text-sm text-[var(--os-text-secondary)]">{projectValue ? `${Math.min(100, Math.max(0, totals.collectionRate))}% of project value recorded` : 'No project value set'}</p></div><span className="text-sm font-bold text-[var(--os-text)]">{projectValue ? money(Math.max(0, collectionRemaining)) : '—'}</span></div>
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--os-surface-hover)]"><div className="h-full rounded-full bg-[var(--os-success)]" style={{ width: `${projectValue ? Math.min(100, Math.max(0, totals.collectionRate)) : 0}%` }} /></div>
         <p className="mt-2 text-xs text-[var(--os-text-muted)]">{projectValue ? 'Outstanding against project value' : 'Add a project value to track collection progress.'}</p>
+      </div>
+      <div className="rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] p-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--os-text-muted)]">Financial health</p>
+        <p className={`mt-2 text-lg font-bold ${financialHealth === 'Healthy' ? 'text-[var(--os-success)]' : financialHealth === 'Loss making' || financialHealth === 'Over budget' ? 'text-[var(--os-danger)]' : 'text-[var(--os-warning)]'}`}>{financialHealth}</p>
+        <p className="mt-1 text-xs text-[var(--os-text-secondary)]">{entries.length} linked transaction{entries.length === 1 ? '' : 's'} · {totals.margin}% realized margin</p>
       </div>
     </div>
     {canManage && <div className="mt-5 rounded-xl border border-[var(--os-border)] bg-[var(--os-surface-raised)] p-4">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-semibold text-[var(--os-text)]">{editing ? 'Edit project transaction' : 'Record project transaction'}</p><p className="mt-1 text-xs text-[var(--os-text-secondary)]">Linked automatically to this project and its client.</p></div>{editing && <Button type="button" variant="secondary" onClick={resetForm}>Cancel</Button>}</div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><p className="text-sm font-semibold text-[var(--os-text)]">{editing ? 'Edit project transaction' : 'Record project transaction'}</p><p className="mt-1 text-xs text-[var(--os-text-secondary)]">Linked automatically to this project, client, and main Finance ledger.</p></div>{editing && <Button type="button" variant="secondary" onClick={resetForm}>Cancel</Button>}</div>
       <form onSubmit={save} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="flex gap-2 sm:col-span-2 xl:col-span-4">{(['income', 'expense'] as ProjectEntryType[]).map((type) => <button key={type} type="button" onClick={() => setForm((current) => ({ ...current, type, category: type === 'income' ? 'Project Payment' : 'Development' }))} className={`rounded-xl border px-4 py-2.5 text-xs font-semibold capitalize ${form.type === type ? 'border-[var(--os-accent)] bg-[var(--os-accent-soft)] text-[var(--os-accent)]' : 'border-[var(--os-border)] text-[var(--os-text-secondary)]'}`}>{type}</button>)}</div>
         <input required type="number" min="0.01" step="0.01" value={form.amount} onChange={(event) => setForm((current) => ({ ...current, amount: event.target.value }))} placeholder="Amount ₹" className={input} />
