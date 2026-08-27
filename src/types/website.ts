@@ -80,4 +80,5 @@ export type CreateWebsiteInput = {
   repositoryUrl?: string
   technologyStack?: string
   deploymentPlatform?: string
+  healthStatus?: WebsiteHealthStatus
 }
