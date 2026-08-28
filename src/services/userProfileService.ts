@@ -32,6 +32,7 @@ export async function saveUserProfile(uid: string, input: UserProfileInput) {
 
 export async function uploadProfilePhoto(uid: string, file: File) {
   if (!uid) throw new Error('User account is required.')
+  if (!storage) throw new Error('Firebase Storage is not configured. Add VITE_FIREBASE_STORAGE_BUCKET to your local environment and restart the dev server.')
   if (!file.type.startsWith('image/')) throw new Error('Please choose an image file.')
   if (file.size > 5 * 1024 * 1024) throw new Error('Profile image must be 5 MB or smaller.')
   const storageRef = ref(storage, `userProfiles/${uid}/profile-${Date.now()}`)
@@ -42,7 +43,8 @@ export async function uploadProfilePhoto(uid: string, file: File) {
 }
 
 export async function removeProfilePhoto(uid: string, photoUrl?: string) {
-  if (photoUrl) {
+  if (!uid) throw new Error('User account is required.')
+  if (storage && photoUrl) {
     try { await deleteObject(ref(storage, photoUrl)) } catch { /* old or externally stored URL; Firestore cleanup still proceeds */ }
   }
   await setDoc(doc(db, COLLECTION, uid), { photoUrl: '', updatedAt: serverTimestamp() }, { merge: true })
