@@ -3,9 +3,9 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     function signedIn() { return request.auth != null; }
-    function workspaceMember(workspaceId) { return exists(/databases/(default)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)); }
-    function activeWorkspaceMember(workspaceId) { return workspaceMember(workspaceId) && get(/databases/(default)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.status == 'active'; }
-    function workspaceOwner(workspaceId) { return signedIn() && exists(/databases/(default)/documents/workspaces/$(workspaceId)) && get(/databases/(default)/documents/workspaces/$(workspaceId)).data.ownerId == request.auth.uid; }
+    function workspaceMember(workspaceId) { return firestore.exists(/databases/(default)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)); }
+    function activeWorkspaceMember(workspaceId) { return workspaceMember(workspaceId) && firestore.get(/databases/(default)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.status == 'active'; }
+    function workspaceOwner(workspaceId) { return signedIn() && firestore.exists(/databases/(default)/documents/workspaces/$(workspaceId)) && firestore.get(/databases/(default)/documents/workspaces/$(workspaceId)).data.ownerId == request.auth.uid; }
 
     match /userProfiles/{userId}/{fileName} {
       allow read: if signedIn();
