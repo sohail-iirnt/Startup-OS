@@ -3,20 +3,36 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
     function signedIn() { return request.auth != null; }
-    function workspaceMember(workspaceId) { return firestore.exists(/databases/(default)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)); }
-    function activeWorkspaceMember(workspaceId) { return workspaceMember(workspaceId) && firestore.get(/databases/(default)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.status == 'active'; }
-    function workspaceOwner(workspaceId) { return signedIn() && firestore.exists(/databases/(default)/documents/workspaces/$(workspaceId)) && firestore.get(/databases/(default)/documents/workspaces/$(workspaceId)).data.ownerId == request.auth.uid; }
+    function workspaceMember(workspaceId) {
+      return signedIn() && firestore.exists(/databases/(default)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid));
+    }
+    function activeWorkspaceMember(workspaceId) {
+      return workspaceMember(workspaceId) && (
+        firestore.get(/databases/(default)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.status == 'active' ||
+        firestore.get(/databases/(default)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.status == null
+      );
+    }
+    function workspaceOwner(workspaceId) {
+      return signedIn() && firestore.exists(/databases/(default)/documents/workspaces/$(workspaceId)) &&
+        firestore.get(/databases/(default)/documents/workspaces/$(workspaceId)).data.ownerId == request.auth.uid;
+    }
+    function canUseWorkspaceStorage(workspaceId) {
+      return workspaceOwner(workspaceId) || activeWorkspaceMember(workspaceId);
+    }
+    function validImageUpload() {
+      return request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+    }
 
     match /userProfiles/{userId}/{fileName} {
       allow read: if signedIn();
-      allow write: if signedIn() && request.auth.uid == userId && request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+      allow write: if signedIn() && request.auth.uid == userId && validImageUpload();
       allow delete: if signedIn() && request.auth.uid == userId;
     }
 
     match /workspaces/{workspaceId}/letter-logos/{fileName} {
-      allow read: if signedIn() && (activeWorkspaceMember(workspaceId) || workspaceOwner(workspaceId));
-      allow write: if signedIn() && (activeWorkspaceMember(workspaceId) || workspaceOwner(workspaceId)) && request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
-      allow delete: if signedIn() && (activeWorkspaceMember(workspaceId) || workspaceOwner(workspaceId));
+      allow read: if canUseWorkspaceStorage(workspaceId);
+      allow write: if canUseWorkspaceStorage(workspaceId) && validImageUpload();
+      allow delete: if canUseWorkspaceStorage(workspaceId);
     }
 
     match /{allPaths=**} { allow read, write: if false; }
