@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc, where, type Unsubscribe } from 'firebase/firestore'
+import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where, type Unsubscribe } from 'firebase/firestore'
 import { db } from '../lib/firebase'
 import type { CreateKnowledgeDocumentInput, KnowledgeDocument } from '../types/knowledgeDocument'
 
@@ -29,7 +29,7 @@ function mapDocument(id: string, data: Record<string, unknown>): KnowledgeDocume
 }
 
 export function subscribeToKnowledgeDocuments(workspaceId: string, onData: (items: KnowledgeDocument[]) => void, onError: (error: Error) => void): Unsubscribe {
-  const documentsQuery = query(collection(db, COLLECTION), where('workspaceId', '==', workspaceId), orderBy('createdAt', 'desc'))
+  const documentsQuery = query(collection(db, COLLECTION), where('workspaceId', '==', workspaceId))
   return onSnapshot(documentsQuery, snapshot => {
     onData(snapshot.docs.map(item => mapDocument(item.id, item.data() as Record<string, unknown>)))
   }, error => onError(error))
