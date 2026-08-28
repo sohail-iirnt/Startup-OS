@@ -15,6 +15,8 @@ import {
 import { navigationSections } from '../../config/navigation'
 import { useWorkspace } from '../../context/useWorkspace'
 import { useAuth } from '../../context/useAuth'
+import { getUserProfile } from '../../services/userProfileService'
+import type { UserProfile } from '../../types/userProfile'
 
 type SidebarProps = {
   mobileOpen: boolean
@@ -25,6 +27,7 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const { workspace, member, loading, hasPermission } = useWorkspace()
   const { user } = useAuth()
   const [workspaceOpen, setWorkspaceOpen] = useState(false)
+  const [profile, setProfile] = useState<UserProfile | null>(null)
   const workspaceMenuRef = useRef<HTMLDivElement | null>(null)
   const canManageWorkspace = member?.role === 'owner' || member?.role === 'admin'
 
@@ -45,10 +48,26 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
     }
   }, [workspaceOpen])
 
+  useEffect(() => {
+    const uid = user?.uid
+    if (!uid) {
+      setProfile(null)
+      return undefined
+    }
+    let active = true
+    void getUserProfile(uid).then((next) => {
+      if (active) setProfile(next)
+    }).catch(() => {
+      if (active) setProfile(null)
+    })
+    return () => { active = false }
+  }, [user?.uid])
+
   const workspaceInitials = workspace?.name?.split(' ').filter(Boolean).slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join('') || 'WS'
-  const currentUserName = user?.displayName?.trim() || user?.email?.split('@')[0] || 'Workspace Member'
+  const currentUserName = profile?.fullName?.trim() || user?.displayName?.trim() || user?.email?.split('@')[0] || 'Workspace Member'
   const currentUserInitials = currentUserName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join('') || 'WM'
-  const currentUserPosition = member?.designation?.trim() || (member?.role ? `${member.role.charAt(0).toUpperCase()}${member.role.slice(1)}` : 'Workspace Member')
+  const currentUserPosition = profile?.jobTitle?.trim() || member?.designation?.trim() || (member?.role ? `${member.role.charAt(0).toUpperCase()}${member.role.slice(1)}` : 'Workspace Member')
+  const currentUserPhoto = profile?.photoUrl?.trim() || user?.photoURL || ''
   const portalName = workspace?.portalName?.trim() || 'Startup OS'
   const portalSubtitle = workspace?.portalSubtitle?.trim() || 'Founder Command Center'
   const workspaceMenuAvailable = canManageWorkspace
@@ -91,7 +110,7 @@ function Sidebar({ mobileOpen, onClose }: SidebarProps) {
 
         <nav className="flex-1 overflow-y-auto px-3 py-5"><div className="space-y-6">{navigationSections.map((section) => <div key={section.label}><p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--os-text-muted)]">{section.label}</p><div className="space-y-1">{section.items.map((item) => { if (item.permission && !hasPermission(item.permission)) return null; const Icon = item.icon; return <NavLink key={item.path} to={item.path} onClick={onClose} end={item.path === '/'} className={({ isActive }) => ['group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200', isActive ? 'bg-[var(--os-accent-soft)] text-[var(--os-text)]' : 'text-[var(--os-text-secondary)] hover:bg-[var(--os-surface-hover)] hover:text-[var(--os-text)]'].join(' ')}>{({ isActive }) => <><Icon size={17} strokeWidth={isActive ? 2.2 : 1.8} className={isActive ? 'text-[var(--os-accent)]' : 'text-[var(--os-text-muted)] transition-colors group-hover:text-[var(--os-text-secondary)]'} /><span className="truncate">{item.label}</span></>}</NavLink> })}{section.label === 'Operations' && hasPermission('members.approve') && <NavLink to="/team/approvals" onClick={onClose} className={({ isActive }) => ['group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200', isActive ? 'bg-[var(--os-accent-soft)] text-[var(--os-text)]' : 'text-[var(--os-text-secondary)] hover:bg-[var(--os-surface-hover)] hover:text-[var(--os-text)]'].join(' ')}>{({ isActive }) => <><ShieldCheck size={17} strokeWidth={isActive ? 2.2 : 1.8} className={isActive ? 'text-[var(--os-accent)]' : 'text-[var(--os-text-muted)] transition-colors group-hover:text-[var(--os-text-secondary)]'} /><span className="truncate">Member Approvals</span></>}</NavLink>}</div></div>)}</div></nav>
 
-        <div className="border-t border-[var(--os-border)] p-3"><div className="rounded-xl bg-[var(--os-surface-raised)] p-2"><div className="flex items-center gap-3 px-2 py-2"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--os-accent-soft)] text-sm font-semibold text-[var(--os-accent)]">{currentUserInitials}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-[var(--os-text)]">{currentUserName}</p><p className="truncate text-xs text-[var(--os-text-muted)]">{user?.email || 'Workspace Member'}</p><p className="truncate text-[10px] font-medium text-[var(--os-accent)]">{currentUserPosition}</p></div></div><button type="button" onClick={async () => { try { const { logout } = await import('../../services/authService'); await logout() } catch (error) { console.error('Logout failed:', error) } }} className="mt-1 flex w-full items-center rounded-lg px-2 py-2 text-left text-xs font-medium text-[var(--os-text-secondary)] transition-colors hover:bg-[var(--os-surface-hover)] hover:text-[var(--os-danger)]">Sign out</button></div></div>
+        <div className="border-t border-[var(--os-border)] p-3"><div className="rounded-xl bg-[var(--os-surface-raised)] p-2"><NavLink to="/profile" onClick={onClose} className="group flex items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-[var(--os-surface-hover)]"><div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--os-accent-soft)] text-sm font-semibold text-[var(--os-accent)]">{currentUserPhoto ? <img src={currentUserPhoto} alt="" className="h-full w-full object-cover" /> : currentUserInitials}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-[var(--os-text)]">{currentUserName}</p><p className="truncate text-xs text-[var(--os-text-muted)]">{profile?.email || user?.email || 'Workspace Member'}</p><p className="truncate text-[10px] font-medium text-[var(--os-accent)]">{currentUserPosition}</p></div></NavLink><button type="button" onClick={async () => { try { const { logout } = await import('../../services/authService'); await logout() } catch (error) { console.error('Logout failed:', error) } }} className="mt-1 flex w-full items-center rounded-lg px-2 py-2 text-left text-xs font-medium text-[var(--os-text-secondary)] transition-colors hover:bg-[var(--os-surface-hover)] hover:text-[var(--os-danger)]">Sign out</button></div></div>
       </aside>
     </>
   )
