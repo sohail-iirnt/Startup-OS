@@ -6,21 +6,14 @@ service firebase.storage {
     function workspaceMember(workspaceId) {
       return signedIn() && firestore.exists(/databases/(default)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid));
     }
-    function activeWorkspaceMember(workspaceId) {
-      return workspaceMember(workspaceId) && (
-        firestore.get(/databases/(default)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.status == 'active' ||
-        firestore.get(/databases/(default)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.status == null
-      );
-    }
     function workspaceOwner(workspaceId) {
-      return signedIn() && firestore.exists(/databases/(default)/documents/workspaces/$(workspaceId)) &&
-        firestore.get(/databases/(default)/documents/workspaces/$(workspaceId)).data.ownerId == request.auth.uid;
+      return signedIn() && firestore.exists(/databases/(default)/documents/workspaces/$(workspaceId)) && firestore.get(/databases/(default)/documents/workspaces/$(workspaceId)).data.ownerId == request.auth.uid;
     }
     function canUseWorkspaceStorage(workspaceId) {
-      return workspaceOwner(workspaceId) || activeWorkspaceMember(workspaceId);
+      return workspaceOwner(workspaceId) || workspaceMember(workspaceId);
     }
     function validImageUpload() {
-      return request.resource.size < 5 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+      return request.resource.size < 5 * 1024 * 1024 && request.resource.contentType != null && request.resource.contentType.matches('image/.*');
     }
 
     match /userProfiles/{userId}/{fileName} {
@@ -31,7 +24,7 @@ service firebase.storage {
 
     match /workspaces/{workspaceId}/letter-logos/{fileName} {
       allow read: if canUseWorkspaceStorage(workspaceId);
-      allow write: if canUseWorkspaceStorage(workspaceId) && validImageUpload();
+      allow create, update: if canUseWorkspaceStorage(workspaceId) && validImageUpload();
       allow delete: if canUseWorkspaceStorage(workspaceId);
     }
 
