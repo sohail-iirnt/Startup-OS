@@ -66,6 +66,13 @@ service cloud.firestore {
     function canApproveMemberUpdate(workspaceId) { return canApproveMembers(workspaceId) && request.resource.data.role in (isWorkspaceAdmin(workspaceId) ? ['admin', 'manager', 'member', 'intern', 'viewer'] : ['member', 'intern', 'viewer']) && request.resource.data.status == 'active'; }
 
     match /users/{userId} { allow read: if signedIn(); allow create, update: if signedIn() && request.auth.uid == userId; allow delete: if false; }
+    match /userProfiles/{userId} { allow read, create, update: if signedIn() && request.auth.uid == userId; allow delete: if false; }
+    match /notifications/{notificationId} {
+      allow read: if signedIn() && resource.data.recipientId == request.auth.uid;
+      allow create: if signedIn() && request.resource.data.recipientId == request.auth.uid && hasActiveMembership(request.resource.data.workspaceId) && request.resource.data.createdBy == request.auth.uid;
+      allow update: if signedIn() && resource.data.recipientId == request.auth.uid && request.resource.data.recipientId == resource.data.recipientId && request.resource.data.workspaceId == resource.data.workspaceId;
+      allow delete: if signedIn() && resource.data.recipientId == request.auth.uid;
+    }
     match /workspaces/{workspaceId} {
       allow read: if hasMembership(workspaceId) || isWorkspaceOwner(workspaceId);
       allow create: if signedIn() && request.resource.data.ownerId == request.auth.uid;
