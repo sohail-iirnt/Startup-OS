@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { BarChart3, BriefcaseBusiness, CalendarDays, CheckSquare, CircleDollarSign, FileText, Gauge, Lightbulb, Settings, Users, Globe, ShieldCheck, Target, UserCheck, CalendarRange, ReceiptText } from 'lucide-react'
+import { BarChart3, Bell, BriefcaseBusiness, CalendarDays, CheckSquare, CircleDollarSign, FileText, Gauge, Lightbulb, Settings, Users, Globe, ShieldCheck, Target, UserCheck, CalendarRange, ReceiptText, UserRound } from 'lucide-react'
 import type { WorkspacePermission } from '../types/permissions'
 export type NavigationItem = { label: string; path: string; icon: LucideIcon; permission?: WorkspacePermission }
 export type NavigationSection = { label: string; items: NavigationItem[] }
@@ -10,5 +10,5 @@ export const navigationSections: NavigationSection[] = [
   { label: 'Finance', items: [{ label: 'Finance', path: '/finance', icon: CircleDollarSign, permission: 'finance.view' }, { label: 'Payroll', path: '/finance/payroll', icon: ReceiptText, permission: 'payroll.view' }, { label: 'Quotation Maker', path: '/finance/quotations', icon: FileText, permission: 'finance.view' }] },
   { label: 'Knowledge', items: [{ label: 'Ideas', path: '/ideas', icon: Lightbulb, permission: 'ideas.view' }, { label: 'Documents', path: '/documents', icon: FileText, permission: 'documents.view' }] },
   { label: 'Insights', items: [{ label: 'Analytics', path: '/analytics', icon: BarChart3, permission: 'analytics.view' }] },
-  { label: 'System', items: [{ label: 'Settings', path: '/settings', icon: Settings, permission: 'settings.manage' }, { label: 'Roles & Permissions', path: '/settings/access-control', icon: ShieldCheck, permission: 'access.manage' }] },
+  { label: 'System', items: [{ label: 'Notifications', path: '/notifications', icon: Bell }, { label: 'My Profile', path: '/profile', icon: UserRound }, { label: 'Settings', path: '/settings', icon: Settings, permission: 'settings.manage' }, { label: 'Roles & Permissions', path: '/settings/access-control', icon: ShieldCheck, permission: 'access.manage' }] },
 ]
