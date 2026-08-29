@@ -34,7 +34,7 @@ export default function CRM() {
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null)
 
   async function load() { if (!workspace?.id) return; setLoading(true); try { setClients(await getClients(workspace.id)); setError('') } catch (err) { setError(err instanceof Error ? err.message : 'Unable to load CRM data.') } finally { setLoading(false) } }
-  useEffect(() => { if (!workspaceLoading && workspace?.id) void load(); else if (!workspaceLoading) setLoading(false) }, [workspace?.id, workspaceLoading])
+  useEffect(() => { if (!workspaceLoading && workspace?.id) void load() }, [workspace?.id, workspaceLoading])
   const activeDeals = useMemo(() => clients.filter(item => item.crmStage !== 'lost'), [clients])
   const stats = useMemo(() => { const pipeline = activeDeals.reduce((sum, item) => sum + (item.dealValue ?? 0), 0); const weighted = activeDeals.reduce((sum, item) => sum + (item.dealValue ?? 0) * ((item.probability ?? 0) / 100), 0); const overdue = activeDeals.filter(item => item.nextFollowUp && item.nextFollowUp < new Date().toISOString().slice(0, 10)).length; return { total: clients.length, pipeline, weighted, won: clients.filter(item => item.crmStage === 'won').reduce((sum, item) => sum + (item.dealValue ?? 0), 0), overdue } }, [clients, activeDeals])
   const filtered = useMemo(() => { const q = queryText.trim().toLowerCase(); return clients.filter(item => (!q || [item.name, item.companyName, item.email, item.phone, item.source, ...(item.tags ?? [])].join(' ').toLowerCase().includes(q)) && (stageFilter === 'all' || item.crmStage === stageFilter)) }, [clients, queryText, stageFilter])
