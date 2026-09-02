@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ArrowRight, CalendarClock, CheckCircle2, CircleDollarSign, Edit3, Plus, Search, Target, Trash2, TrendingUp, Users, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import Button from '../components/ui/Button'
@@ -33,16 +33,30 @@ export default function CRM() {
   const [form, setForm] = useState<CreateClientInput>(emptyInput())
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null)
 
-  const load = useCallback(async () => { if (!workspace?.id) return; setLoading(true); try { setClients(await getClients(workspace.id)); setError('') } catch (err) { setError(err instanceof Error ? err.message : 'Unable to load CRM data.') } finally { setLoading(false) } }, [workspace?.id])
-  useEffect(() => { if (!workspaceLoading && workspace?.id) void load() }, [load, workspaceLoading, workspace?.id])
+  useEffect(() => {
+    if (workspaceLoading || !workspace?.id) return
+    const workspaceId = workspace.id
+    let active = true
+    void (async () => {
+      try {
+        const next = await getClients(workspaceId)
+        if (active) { setClients(next); setError('') }
+      } catch (err) {
+        if (active) setError(err instanceof Error ? err.message : 'Unable to load CRM data.')
+      } finally {
+        if (active) setLoading(false)
+      }
+    })()
+    return () => { active = false }
+  }, [workspaceLoading, workspace?.id])
   const activeDeals = useMemo(() => clients.filter(item => item.crmStage !== 'lost'), [clients])
   const stats = useMemo(() => { const pipeline = activeDeals.reduce((sum, item) => sum + (item.dealValue ?? 0), 0); const weighted = activeDeals.reduce((sum, item) => sum + (item.dealValue ?? 0) * ((item.probability ?? 0) / 100), 0); const overdue = activeDeals.filter(item => item.nextFollowUp && item.nextFollowUp < new Date().toISOString().slice(0, 10)).length; return { total: clients.length, pipeline, weighted, won: clients.filter(item => item.crmStage === 'won').reduce((sum, item) => sum + (item.dealValue ?? 0), 0), overdue } }, [clients, activeDeals])
   const filtered = useMemo(() => { const q = queryText.trim().toLowerCase(); return clients.filter(item => (!q || [item.name, item.companyName, item.email, item.phone, item.source, ...(item.tags ?? [])].join(' ').toLowerCase().includes(q)) && (stageFilter === 'all' || item.crmStage === stageFilter)) }, [clients, queryText, stageFilter])
   function update<K extends keyof CreateClientInput>(key: K, value: CreateClientInput[K]) { setForm(current => ({ ...current, [key]: value })) }
   function openNew() { setEditing(null); setForm(emptyInput()); setEditor(true); setError('') }
   function openEdit(client: Client) { setEditing(client); setForm({ type: client.type, name: client.name, companyName: client.companyName ?? '', email: client.email ?? '', phone: client.phone ?? '', website: client.website ?? '', address: client.address ?? '', status: client.status, source: client.source ?? '', notes: client.notes ?? '', crmStage: client.crmStage ?? 'new', dealValue: client.dealValue ?? 0, probability: client.probability ?? 0, expectedCloseDate: client.expectedCloseDate ?? '', nextFollowUp: client.nextFollowUp ?? '', lastContactDate: client.lastContactDate ?? '', relationshipOwnerId: client.relationshipOwnerId ?? '', tags: client.tags ?? [] }); setEditor(true); setError('') }
-  async function save() { if (!workspace?.id || !form.name.trim()) { setError('Lead / client name is required.'); return } setSaving(true); setError(''); try { const input: CreateClientInput = { ...form, status: form.crmStage === 'won' ? 'active' : form.status }; if (editing) await updateClient(editing.id, workspace.id, input); else await createClient(workspace.id, input); setEditor(false); await load() } catch (err) { setError(err instanceof Error ? err.message : 'Unable to save CRM record.') } finally { setSaving(false) } }
-  async function remove() { if (!deleteTarget || !workspace?.id) return; try { await deleteClient(deleteTarget.id, workspace.id); setDeleteTarget(null); await load() } catch (err) { setError(err instanceof Error ? err.message : 'Unable to delete CRM record.') } }
+  async function save() { if (!workspace?.id || !form.name.trim()) { setError('Lead / client name is required.'); return } setSaving(true); setError(''); try { const input: CreateClientInput = { ...form, status: form.crmStage === 'won' ? 'active' : form.status }; if (editing) await updateClient(editing.id, workspace.id, input); else await createClient(workspace.id, input); const next = await getClients(workspace.id); setClients(next); setEditor(false) } catch (err) { setError(err instanceof Error ? err.message : 'Unable to save CRM record.') } finally { setSaving(false) } }
+  async function remove() { if (!deleteTarget || !workspace?.id) return; try { await deleteClient(deleteTarget.id, workspace.id); setDeleteTarget(null); const next = await getClients(workspace.id); setClients(next) } catch (err) { setError(err instanceof Error ? err.message : 'Unable to delete CRM record.') } }
 
   return <div className="mx-auto w-full max-w-[1400px] p-4 sm:p-6 lg:p-8">
     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--os-accent)]">Business relationships</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-[var(--os-text)] sm:text-4xl">CRM Command Center</h1><p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--os-text-secondary)]">Turn leads into clients with one place for pipeline value, follow-ups, relationship context and deal progress.</p></div>{canManage && <Button onClick={openNew}><Plus size={16} /> New lead</Button>}</div>
