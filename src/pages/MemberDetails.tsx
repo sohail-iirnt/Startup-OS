@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, BriefcaseBusiness, CheckCircle2, Clock3, Mail, MapPin, Phone, Save, Shield, UserRound, UserRoundX, Workflow } from 'lucide-react'
+import { ArrowLeft, BriefcaseBusiness, CheckCircle2, Clock3, Mail, MapPin, Phone, Save, Shield, UserRoundX, Workflow } from 'lucide-react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
