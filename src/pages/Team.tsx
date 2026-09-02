@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BriefcaseBusiness, CheckCircle2, Clock3, Filter, Globe2, Mail, MapPin, Search, ShieldCheck, UserPlus, UserRound, Users, Workflow } from 'lucide-react'
+import { BriefcaseBusiness, CheckCircle2, Clock3, Filter, Globe2, Mail, MapPin, Search, UserPlus, UserRound, Users, Workflow } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import Card from '../components/ui/Card'
 import Select from '../components/ui/Select'
@@ -40,10 +40,8 @@ function Team() {
     let unsubscribeTasks: (() => void) | undefined
     let unsubscribeMembers: (() => void) | undefined
     if (isIntern) {
-      setLoading(true)
       void Promise.all([import('../services/memberService').then(service => service.getWorkspaceMemberDetails(workspaceId, userId)), subscribeToTasks(workspaceId, next => { if (active) setTasks(next.filter(task => task.assigneeId === userId || task.createdBy === userId)) }, listenError => active && setError(listenError.message))]).then(([memberResult]) => { if (active) { setMembers(memberResult ? [memberResult] : []); setLoading(false) } }).catch(loadError => { if (active) { setError(loadError instanceof Error ? loadError.message : 'Unable to load your workspace profile.'); setLoading(false) } })
     } else {
-      setLoading(true)
       unsubscribeMembers = subscribeToTeamMembers(workspaceId, next => { if (active) { setMembers(next); setLoading(false); setError('') } }, listenError => { if (active) { setError(listenError.message); setLoading(false) } })
       void subscribeToTasks(workspaceId, next => { if (active) { setTasks(next); setLoading(false) } }, listenError => { if (active) { setError(listenError.message); setLoading(false) } }).then(unsubscribe => { unsubscribeTasks = unsubscribe })
     }
