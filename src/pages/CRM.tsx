@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ArrowRight, CalendarClock, CheckCircle2, CircleDollarSign, Edit3, Plus, Search, Target, Trash2, TrendingUp, Users, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import Button from '../components/ui/Button'
@@ -33,8 +33,8 @@ export default function CRM() {
   const [form, setForm] = useState<CreateClientInput>(emptyInput())
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null)
 
-  async function load() { if (!workspace?.id) return; setLoading(true); try { setClients(await getClients(workspace.id)); setError('') } catch (err) { setError(err instanceof Error ? err.message : 'Unable to load CRM data.') } finally { setLoading(false) } }
-  useEffect(() => { if (!workspaceLoading && workspace?.id) void load() }, [workspace?.id, workspaceLoading])
+  const load = useCallback(async () => { if (!workspace?.id) return; setLoading(true); try { setClients(await getClients(workspace.id)); setError('') } catch (err) { setError(err instanceof Error ? err.message : 'Unable to load CRM data.') } finally { setLoading(false) } }, [workspace?.id])
+  useEffect(() => { if (!workspaceLoading && workspace?.id) void load() }, [load, workspaceLoading, workspace?.id])
   const activeDeals = useMemo(() => clients.filter(item => item.crmStage !== 'lost'), [clients])
   const stats = useMemo(() => { const pipeline = activeDeals.reduce((sum, item) => sum + (item.dealValue ?? 0), 0); const weighted = activeDeals.reduce((sum, item) => sum + (item.dealValue ?? 0) * ((item.probability ?? 0) / 100), 0); const overdue = activeDeals.filter(item => item.nextFollowUp && item.nextFollowUp < new Date().toISOString().slice(0, 10)).length; return { total: clients.length, pipeline, weighted, won: clients.filter(item => item.crmStage === 'won').reduce((sum, item) => sum + (item.dealValue ?? 0), 0), overdue } }, [clients, activeDeals])
   const filtered = useMemo(() => { const q = queryText.trim().toLowerCase(); return clients.filter(item => (!q || [item.name, item.companyName, item.email, item.phone, item.source, ...(item.tags ?? [])].join(' ').toLowerCase().includes(q)) && (stageFilter === 'all' || item.crmStage === stageFilter)) }, [clients, queryText, stageFilter])
